@@ -1,0 +1,17 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: olympic-ai-demo-postgres
+    environment:
+      POSTGRES_DB: olympic_ai_demo
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./database/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
+      - olympic-ai-demo-data:/var/lib/postgresql/data
+
+volumes:
+  olympic-ai-demo-data:

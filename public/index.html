@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Restaurant AI Chat Demo</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="restaurant-panel" aria-label="Restaurant selection">
+        <div class="brand-row">
+          <img class="brand-mark" src="https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=240&q=80" alt="Burger with fries">
+          <div>
+            <p class="eyebrow">AI ordering demo</p>
+            <h1>Olympic Flame Burgers</h1>
+          </div>
+        </div>
+
+        <label for="restaurantSelect">Pickup restaurant</label>
+        <select id="restaurantSelect"></select>
+
+        <div class="chat-actions" aria-label="Chat controls">
+          <button type="button" id="newChatButton">New chat</button>
+          <button type="button" id="endChatButton" class="secondary-action">End chat</button>
+        </div>
+
+        <div class="prompt-group" aria-label="Example prompts">
+          <button type="button" data-prompt="what is good for lunch?">Lunch ideas</button>
+          <button type="button" data-prompt="what is good for dinner?">Dinner list</button>
+          <button type="button" data-prompt="show me locations and hours">Locations</button>
+          <button type="button" data-prompt="I want to order a bacon avocado burger combo">Draft order</button>
+          <button type="button" data-prompt="what were yesterday sales?">Sensitive test</button>
+        </div>
+
+        <div class="guardrail">
+          <strong>AI access:</strong>
+          Menu, locations, hours, draft orders, confirmed orders.
+          <br>
+          <strong>Blocked:</strong>
+          Sales, payroll, private payments, admin data.
+        </div>
+      </section>
+
+      <section class="chat-panel" aria-label="AI chat">
+        <div id="messages" class="messages" aria-live="polite"></div>
+        <form id="chatForm" class="composer">
+          <input id="messageInput" name="message" autocomplete="off" placeholder="Ask about lunch, hours, or ordering..." required>
+          <button type="submit">Send</button>
+        </form>
+      </section>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
