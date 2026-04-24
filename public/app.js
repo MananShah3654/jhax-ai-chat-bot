@@ -4,8 +4,14 @@ const messageInput = document.querySelector("#messageInput");
 const restaurantSelect = document.querySelector("#restaurantSelect");
 const newChatButton = document.querySelector("#newChatButton");
 const endChatButton = document.querySelector("#endChatButton");
-const mobilePanelToggle = document.querySelector("#mobilePanelToggle");
+const assistantDrawer = document.querySelector("#assistantDrawer");
+const mobileMenuButton = document.querySelector("#mobileMenuButton");
+const mobilePanelClose = document.querySelector("#mobilePanelClose");
+const mobileBackdrop = document.querySelector("#mobileBackdrop");
+const mobileHeaderNewChat = document.querySelector("#mobileHeaderNewChat");
 const panelContent = document.querySelector("#panelContent");
+const promptNavItems = [...document.querySelectorAll("[data-prompt-tab]")];
+const promptPanels = [...document.querySelectorAll("[data-prompt-panel]")];
 let sessionId = window.localStorage.getItem("restaurantAiSessionId") || "";
 const cartItems = new Map();
 
@@ -14,8 +20,12 @@ bootstrap();
 async function bootstrap() {
   addMessage("assistant", "Hi. I'm JhaPay AI — your conversational commerce assistant.\n\nI can help you discover restaurants, build an order, pay with your JhaPay wallet, and much more. Try any of the prompts on the left, or just ask.");
   await loadRestaurants();
-  if (mobilePanelToggle) mobilePanelToggle.addEventListener("click", toggleMobilePanel);
+  if (mobileMenuButton) mobileMenuButton.addEventListener("click", toggleMobilePanel);
+  if (mobilePanelClose) mobilePanelClose.addEventListener("click", closeMobilePanel);
+  if (mobileBackdrop) mobileBackdrop.addEventListener("click", closeMobilePanel);
+  if (mobileHeaderNewChat) mobileHeaderNewChat.addEventListener("click", () => resetChat("New chat started. How can I help you today?"));
   syncMobilePanelState();
+  bindPromptWorkspace();
   document.querySelectorAll("[data-prompt]").forEach((btn) => {
     btn.addEventListener("click", () => {
       messageInput.value = btn.dataset.prompt;
@@ -522,31 +532,59 @@ function resetChat(message) {
 }
 
 function toggleMobilePanel() {
-  if (!mobilePanelToggle || !panelContent) return;
-  const expanded = mobilePanelToggle.getAttribute("aria-expanded") === "true";
-  mobilePanelToggle.setAttribute("aria-expanded", String(!expanded));
-  panelContent.classList.toggle("mobile-open", !expanded);
+  if (isMobilePanelOpen()) closeMobilePanel();
+  else openMobilePanel();
+}
+
+function openMobilePanel() {
+  if (!isMobileLayout() || !assistantDrawer) return;
+  assistantDrawer.classList.add("mobile-open");
+  panelContent?.classList.add("mobile-open");
+  document.body.classList.add("drawer-open");
+  if (mobileBackdrop) mobileBackdrop.hidden = false;
+  if (mobileMenuButton) mobileMenuButton.setAttribute("aria-expanded", "true");
 }
 
 function closeMobilePanel() {
-  if (!isMobileLayout() || !mobilePanelToggle || !panelContent) return;
-  mobilePanelToggle.setAttribute("aria-expanded", "false");
-  panelContent.classList.remove("mobile-open");
+  if (!assistantDrawer) return;
+  assistantDrawer.classList.remove("mobile-open");
+  panelContent?.classList.remove("mobile-open");
+  document.body.classList.remove("drawer-open");
+  if (mobileBackdrop) mobileBackdrop.hidden = true;
+  if (mobileMenuButton) mobileMenuButton.setAttribute("aria-expanded", "false");
 }
 
 function syncMobilePanelState() {
-  if (!mobilePanelToggle || !panelContent) return;
-  if (isMobileLayout()) {
-    const expanded = mobilePanelToggle.getAttribute("aria-expanded") === "true";
-    panelContent.classList.toggle("mobile-open", expanded);
-    return;
-  }
-  mobilePanelToggle.setAttribute("aria-expanded", "false");
-  panelContent.classList.remove("mobile-open");
+  if (!assistantDrawer) return;
+  if (!isMobileLayout()) closeMobilePanel();
 }
 
 function isMobileLayout() {
   return window.matchMedia("(max-width: 780px)").matches;
+}
+
+function isMobilePanelOpen() {
+  return assistantDrawer?.classList.contains("mobile-open");
+}
+
+function bindPromptWorkspace() {
+  if (promptNavItems.length === 0 || promptPanels.length === 0) return;
+  promptNavItems.forEach((item) => {
+    item.addEventListener("click", () => setActivePromptTab(item.dataset.promptTab));
+  });
+  const initial = promptNavItems.find((item) => item.classList.contains("active"))?.dataset.promptTab || promptNavItems[0].dataset.promptTab;
+  setActivePromptTab(initial);
+}
+
+function setActivePromptTab(tab) {
+  promptNavItems.forEach((item) => {
+    const active = item.dataset.promptTab === tab;
+    item.classList.toggle("active", active);
+    item.setAttribute("aria-pressed", String(active));
+  });
+  promptPanels.forEach((panel) => {
+    panel.classList.toggle("active", panel.dataset.promptPanel === tab);
+  });
 }
 
 function formatPickup(restaurant) {
