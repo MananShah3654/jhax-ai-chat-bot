@@ -4,6 +4,8 @@ const messageInput = document.querySelector("#messageInput");
 const restaurantSelect = document.querySelector("#restaurantSelect");
 const newChatButton = document.querySelector("#newChatButton");
 const endChatButton = document.querySelector("#endChatButton");
+const mobilePanelToggle = document.querySelector("#mobilePanelToggle");
+const panelContent = document.querySelector("#panelContent");
 let sessionId = window.localStorage.getItem("restaurantAiSessionId") || "";
 const cartItems = new Map();
 
@@ -12,9 +14,12 @@ bootstrap();
 async function bootstrap() {
   addMessage("assistant", "Hi. I'm JhaPay AI — your conversational commerce assistant.\n\nI can help you discover restaurants, build an order, pay with your JhaPay wallet, and much more. Try any of the prompts on the left, or just ask.");
   await loadRestaurants();
+  if (mobilePanelToggle) mobilePanelToggle.addEventListener("click", toggleMobilePanel);
+  syncMobilePanelState();
   document.querySelectorAll("[data-prompt]").forEach((btn) => {
     btn.addEventListener("click", () => {
       messageInput.value = btn.dataset.prompt;
+      closeMobilePanel();
       messageInput.focus();
     });
   });
@@ -30,6 +35,7 @@ chatForm.addEventListener("submit", async (event) => {
 
 newChatButton.addEventListener("click", () => resetChat("New chat started. How can I help you today?"));
 endChatButton.addEventListener("click", () => resetChat("Chat ended. Start a new chat when you are ready."));
+window.addEventListener("resize", syncMobilePanelState);
 
 // ─── Streaming Chat ───────────────────────────────────────────────────────────
 
@@ -510,8 +516,37 @@ function resetChat(message) {
   window.localStorage.setItem("restaurantAiSessionId", sessionId);
   messages.textContent = "";
   addMessage("assistant", message);
+  closeMobilePanel();
   messageInput.value = "";
   messageInput.focus();
+}
+
+function toggleMobilePanel() {
+  if (!mobilePanelToggle || !panelContent) return;
+  const expanded = mobilePanelToggle.getAttribute("aria-expanded") === "true";
+  mobilePanelToggle.setAttribute("aria-expanded", String(!expanded));
+  panelContent.classList.toggle("mobile-open", !expanded);
+}
+
+function closeMobilePanel() {
+  if (!isMobileLayout() || !mobilePanelToggle || !panelContent) return;
+  mobilePanelToggle.setAttribute("aria-expanded", "false");
+  panelContent.classList.remove("mobile-open");
+}
+
+function syncMobilePanelState() {
+  if (!mobilePanelToggle || !panelContent) return;
+  if (isMobileLayout()) {
+    const expanded = mobilePanelToggle.getAttribute("aria-expanded") === "true";
+    panelContent.classList.toggle("mobile-open", expanded);
+    return;
+  }
+  mobilePanelToggle.setAttribute("aria-expanded", "false");
+  panelContent.classList.remove("mobile-open");
+}
+
+function isMobileLayout() {
+  return window.matchMedia("(max-width: 780px)").matches;
 }
 
 function formatPickup(restaurant) {

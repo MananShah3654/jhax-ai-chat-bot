@@ -50,6 +50,10 @@ select {
   background: var(--white);
 }
 
+.panel-shell {
+  display: contents;
+}
+
 .brand-row {
   display: grid;
   grid-template-columns: 82px 1fr;
@@ -138,6 +142,10 @@ input:focus {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
+}
+
+.mobile-panel-toggle {
+  display: none;
 }
 
 button {
@@ -700,34 +708,104 @@ button:hover {
   }
 
   .restaurant-panel {
-    position: static;
+    order: 2;
+    position: sticky;
+    top: 0;
+    z-index: 10;
     height: auto;
-    overflow: visible;
+    overflow: clip;
     border-right: 0;
     border-bottom: 1px solid var(--line);
-    padding: 18px;
+    padding: 12px 14px;
+    gap: 12px;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.06);
+  }
+
+  .panel-shell {
+    display: grid;
+    gap: 12px;
+  }
+
+  .brand-row {
+    grid-template-columns: 56px 1fr;
+    gap: 10px;
+  }
+
+  .brand-mark {
+    width: 56px;
+    height: 56px;
+  }
+
+  .mobile-panel-toggle {
+    display: block;
+    width: 100%;
+    padding: 11px 14px;
+    background: #f2efe6;
+    color: var(--ink);
+    border: 1px solid var(--line);
+    text-align: left;
+  }
+
+  .mobile-panel-toggle::after {
+    content: "Open";
+    float: right;
+    color: var(--muted);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  .mobile-panel-toggle[aria-expanded="true"]::after {
+    content: "Close";
+  }
+
+  .panel-content {
+    display: none;
+    gap: 14px;
+  }
+
+  .panel-content.mobile-open {
+    display: grid;
   }
 
   .chat-panel {
+    order: 1;
     height: auto;
-    min-height: 520px;
+    min-height: 100dvh;
   }
 
   h1 {
-    font-size: 24px;
+    font-size: 22px;
+    line-height: 1.1;
   }
 
   .messages {
-    min-height: 420px;
-    padding: 18px;
+    min-height: min(62dvh, 620px);
+    padding: 14px;
+    gap: 12px;
+  }
+
+  .message {
+    width: 100%;
+    max-width: 100%;
+    padding: 13px 14px;
   }
 
   .composer {
     grid-template-columns: 1fr;
+    position: sticky;
+    bottom: 0;
+    padding: 12px 14px calc(12px + env(safe-area-inset-bottom));
+    box-shadow: 0 -8px 18px rgba(0, 0, 0, 0.08);
+  }
+
+  .composer button {
+    width: 100%;
   }
 
   .menu-options {
     grid-template-columns: 1fr;
+    gap: 10px;
   }
 
   .location-options {
@@ -739,15 +817,31 @@ button:hover {
   }
 
   .menu-card {
-    grid-template-columns: 104px 1fr;
+    grid-template-columns: 88px 1fr;
+    gap: 10px;
   }
 
   .menu-card img {
-    width: 104px;
+    width: 88px;
+    min-height: 132px;
   }
 
   .chat-actions {
     grid-template-columns: 1fr;
+  }
+
+  .prompt-group {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .prompt-group button {
+    min-height: 52px;
+    padding: 10px 12px;
+    font-size: 14px;
+  }
+
+  .service-context strong {
+    font-size: 16px;
   }
 
   .order-card-header,
@@ -772,5 +866,62 @@ button:hover {
 
   .wallet-numbers {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 540px) {
+  .restaurant-panel {
+    padding: 10px 12px;
+  }
+
+  .messages {
+    padding: 12px;
+  }
+
+  .prompt-group {
+    grid-template-columns: 1fr;
+  }
+
+  .location-card {
+    grid-template-rows: 140px 1fr;
+  }
+
+  .location-card img {
+    height: 140px;
+  }
+
+  .menu-card {
+    grid-template-columns: 1fr;
+  }
+
+  .menu-card img {
+    width: 100%;
+    height: 140px;
+    min-height: 140px;
+  }
+
+  .menu-card-body {
+    padding: 0 12px 12px;
+  }
+
+  .menu-card button,
+  .quantity-control {
+    width: 100%;
+  }
+
+  .quantity-control {
+    grid-template-columns: 44px 1fr 44px;
+  }
+
+  .order-card {
+    padding: 14px;
+  }
+
+  .display-order-id {
+    font-size: 16px;
+  }
+
+  .wallet-panel {
+    padding: 10px;
   }
 }
