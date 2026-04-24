@@ -3,54 +3,125 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Restaurant AI Chat Demo</title>
+    <title>JhaPay AI — Conversational Commerce</title>
     <link rel="stylesheet" href="/styles.css">
   </head>
   <body>
     <main class="app-shell">
+
       <section class="restaurant-panel" aria-label="Restaurant selection">
         <div class="brand-row">
-          <img class="brand-mark" src="https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=240&q=80" alt="Burger with fries">
+          <img class="brand-mark" src="https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=240&q=80" alt="Burger">
           <div>
-            <p class="eyebrow">AI ordering demo</p>
-            <h1>Olympic Flame Burgers</h1>
+            <p class="eyebrow">JhaPay AI</p>
+            <h1>Conversational Commerce</h1>
           </div>
         </div>
 
-        <label for="restaurantSelect">Pickup restaurant</label>
+        <label for="restaurantSelect">Pickup location</label>
         <select id="restaurantSelect"></select>
 
-        <div class="chat-actions" aria-label="Chat controls">
+        <div class="chat-actions">
           <button type="button" id="newChatButton">New chat</button>
           <button type="button" id="endChatButton" class="secondary-action">End chat</button>
         </div>
 
-        <div class="prompt-group" aria-label="Example prompts">
-          <button type="button" data-prompt="what is good for lunch?">Lunch ideas</button>
-          <button type="button" data-prompt="what is good for dinner?">Dinner list</button>
-          <button type="button" data-prompt="show me locations and hours">Locations</button>
-          <button type="button" data-prompt="I want to order a bacon avocado burger combo">Draft order</button>
-          <button type="button" data-prompt="what were yesterday sales?">Sensitive test</button>
+        <!-- Pillar 1: Discovery -->
+        <div class="prompt-section">
+          <p class="prompt-label">Discovery</p>
+          <div class="prompt-group">
+            <button type="button" data-prompt="Best burgers near me under $20">Burgers under $20</button>
+            <button type="button" data-prompt="Healthy food options nearby">Healthy options</button>
+            <button type="button" data-prompt="Family-friendly spots for kids">Kids menu</button>
+            <button type="button" data-prompt="Cheap eats under $10">Cheap eats</button>
+            <button type="button" data-prompt="Trending places today near me">Trending now</button>
+            <button type="button" data-prompt="Late-night food after 11pm">Late night</button>
+          </div>
+        </div>
+
+        <!-- Pillar 2: Ordering -->
+        <div class="prompt-section">
+          <p class="prompt-label">Ordering</p>
+          <div class="prompt-group">
+            <button type="button" data-prompt="I want to order a bacon avocado burger combo">Draft order</button>
+            <button type="button" data-prompt="Add fries and a soda to my order">Add to order</button>
+            <button type="button" data-prompt="Remove onions, extra cheese">Modify order</button>
+            <button type="button" data-prompt="Make it a combo">Upgrade to combo</button>
+            <button type="button" data-prompt="Order for pickup in 15 mins">Pickup in 15 min</button>
+            <button type="button" data-prompt="Order for delivery to my home">Delivery</button>
+            <button type="button" data-prompt="Reorder last Friday's order">Reorder last</button>
+            <button type="button" data-prompt="Order for table 6">Table service</button>
+            <button type="button" data-prompt="Schedule order for 7pm">Schedule order</button>
+            <button type="button" data-prompt="Cancel my last order">Cancel order</button>
+          </div>
+        </div>
+
+        <!-- Pillar 3: Payments -->
+        <div class="prompt-section">
+          <p class="prompt-label">Payments</p>
+          <div class="prompt-group">
+            <button type="button" data-prompt="Pay my bill with JhaPay wallet">Pay with wallet</button>
+            <button type="button" data-prompt="Split $120 between 3 people">Split bill</button>
+            <button type="button" data-prompt="Send $25 to John">Send money</button>
+            <button type="button" data-prompt="Tip 20% and close check">Tip and close</button>
+            <button type="button" data-prompt="Recharge wallet $100">Recharge wallet</button>
+            <button type="button" data-prompt="Pay this QR code">QR pay</button>
+            <button type="button" data-prompt="Pay my invoice">Pay invoice</button>
+            <button type="button" data-prompt="Request payment from friend">Request payment</button>
+            <button type="button" data-prompt="Pay vendor X now">Pay vendor</button>
+            <button type="button" data-prompt="Auto-pay this bill every week">Auto-pay</button>
+          </div>
+        </div>
+
+        <!-- Pillar 4: Rewards -->
+        <div class="prompt-section">
+          <p class="prompt-label">Rewards</p>
+          <div class="prompt-group">
+            <button type="button" data-prompt="How many points do I have?">My points</button>
+            <button type="button" data-prompt="Where can I redeem points?">Redeem points</button>
+            <button type="button" data-prompt="Any deals near me right now?">Deals nearby</button>
+            <button type="button" data-prompt="Apply best discount automatically">Best discount</button>
+            <button type="button" data-prompt="What can I get for free today?">Free items</button>
+            <button type="button" data-prompt="Show cashback offers nearby">Cashback offers</button>
+            <button type="button" data-prompt="Use my rewards for this order">Use rewards</button>
+            <button type="button" data-prompt="Notify me when burger deals drop">Deal alerts</button>
+            <button type="button" data-prompt="Am I close to any reward milestone?">Milestones</button>
+            <button type="button" data-prompt="Stack coupons for this order">Stack coupons</button>
+          </div>
+        </div>
+
+        <!-- Pillar 5: History + Smart AI -->
+        <div class="prompt-section">
+          <p class="prompt-label">History &amp; Smart AI</p>
+          <div class="prompt-group">
+            <button type="button" data-prompt="Show my last 5 transactions">Last transactions</button>
+            <button type="button" data-prompt="What did I spend this week?">Spend this week</button>
+            <button type="button" data-prompt="Show my orders at Knowlwood">Order history</button>
+            <button type="button" data-prompt="Download my receipts">Receipts</button>
+            <button type="button" data-prompt="Track my current order status">Track order</button>
+            <button type="button" data-prompt="Suggest something like what I ate last time">Suggest for me</button>
+            <button type="button" data-prompt="Find me places similar to Knowlwood">Similar places</button>
+            <button type="button" data-prompt="What should I eat based on my past orders?">My taste profile</button>
+            <button type="button" data-prompt="Plan dinner for 4 under $60 nearby">Plan group dinner</button>
+          </div>
         </div>
 
         <div class="guardrail">
-          <strong>AI access:</strong>
-          Menu, locations, hours, draft orders, confirmed orders.
+          <strong>Live demo:</strong> discovery, ordering, rewards, history, wallet actions, and smart suggestions.
           <br>
-          <strong>Blocked:</strong>
-          Sales, payroll, private payments, admin data.
+          <strong>Safely gated:</strong> vendor payments and private business data remain blocked.
         </div>
       </section>
 
       <section class="chat-panel" aria-label="AI chat">
         <div id="messages" class="messages" aria-live="polite"></div>
         <form id="chatForm" class="composer">
-          <input id="messageInput" name="message" autocomplete="off" placeholder="Ask about lunch, hours, or ordering..." required>
+          <input id="messageInput" name="message" autocomplete="off" placeholder="Ask anything - orders, rewards, payments, history, or smart suggestions..." required>
           <button type="submit">Send</button>
         </form>
       </section>
-    </main>
 
+    </main>
     <script src="/app.js"></script>
   </body>
 </html>
