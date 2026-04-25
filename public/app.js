@@ -12,13 +12,14 @@ const mobileHeaderNewChat = document.querySelector("#mobileHeaderNewChat");
 const panelContent = document.querySelector("#panelContent");
 const promptNavItems = [...document.querySelectorAll("[data-prompt-tab]")];
 const promptPanels = [...document.querySelectorAll("[data-prompt-panel]")];
+const sendButton = chatForm.querySelector(".composer-send");
 let sessionId = window.localStorage.getItem("restaurantAiSessionId") || "";
 const cartItems = new Map();
 
 bootstrap();
 
 async function bootstrap() {
-  addMessage("assistant", "Hi. I'm JhaPay AI — your conversational commerce assistant.\n\nI can help you discover restaurants, build an order, pay with your JhaPay wallet, and much more. Try any of the prompts on the left, or just ask.");
+  addMessage("assistant", "Hi. I'm JhaPay AI — your conversational commerce assistant.\n\nI can help you discover restaurants, build an order, pay with your JhaPay wallet, and much more. Tap the menu icon for modes, or just type below.");
   await loadRestaurants();
   if (mobileMenuButton) mobileMenuButton.addEventListener("click", toggleMobilePanel);
   if (mobilePanelClose) mobilePanelClose.addEventListener("click", closeMobilePanel);
@@ -26,10 +27,13 @@ async function bootstrap() {
   if (mobileHeaderNewChat) mobileHeaderNewChat.addEventListener("click", () => resetChat("New chat started. How can I help you today?"));
   syncMobilePanelState();
   bindPromptWorkspace();
+  syncSendButton();
+  messageInput.addEventListener("input", syncSendButton);
   document.querySelectorAll("[data-prompt]").forEach((btn) => {
     btn.addEventListener("click", () => {
       messageInput.value = btn.dataset.prompt;
       closeMobilePanel();
+      syncSendButton();
       messageInput.focus();
     });
   });
@@ -40,8 +44,14 @@ chatForm.addEventListener("submit", async (event) => {
   const message = messageInput.value.trim();
   if (!message) return;
   messageInput.value = "";
+  syncSendButton();
   await sendChatMessage(message);
 });
+
+function syncSendButton() {
+  if (!sendButton) return;
+  sendButton.disabled = messageInput.value.trim().length === 0;
+}
 
 newChatButton.addEventListener("click", () => resetChat("New chat started. How can I help you today?"));
 endChatButton.addEventListener("click", () => resetChat("Chat ended. Start a new chat when you are ready."));
@@ -542,7 +552,10 @@ function openMobilePanel() {
   panelContent?.classList.add("mobile-open");
   document.body.classList.add("drawer-open");
   if (mobileBackdrop) mobileBackdrop.hidden = false;
-  if (mobileMenuButton) mobileMenuButton.setAttribute("aria-expanded", "true");
+  if (mobileMenuButton) {
+    mobileMenuButton.setAttribute("aria-expanded", "true");
+    mobileMenuButton.setAttribute("aria-label", "Close menu");
+  }
 }
 
 function closeMobilePanel() {
@@ -551,7 +564,10 @@ function closeMobilePanel() {
   panelContent?.classList.remove("mobile-open");
   document.body.classList.remove("drawer-open");
   if (mobileBackdrop) mobileBackdrop.hidden = true;
-  if (mobileMenuButton) mobileMenuButton.setAttribute("aria-expanded", "false");
+  if (mobileMenuButton) {
+    mobileMenuButton.setAttribute("aria-expanded", "false");
+    mobileMenuButton.setAttribute("aria-label", "Open menu");
+  }
 }
 
 function syncMobilePanelState() {
@@ -570,7 +586,11 @@ function isMobilePanelOpen() {
 function bindPromptWorkspace() {
   if (promptNavItems.length === 0 || promptPanels.length === 0) return;
   promptNavItems.forEach((item) => {
-    item.addEventListener("click", () => setActivePromptTab(item.dataset.promptTab));
+    item.addEventListener("click", () => {
+      const tab = item.dataset.promptTab;
+      const alreadyOpen = item.classList.contains("active");
+      setActivePromptTab(alreadyOpen ? null : tab);
+    });
   });
   const initial = promptNavItems.find((item) => item.classList.contains("active"))?.dataset.promptTab || promptNavItems[0].dataset.promptTab;
   setActivePromptTab(initial);
@@ -580,7 +600,7 @@ function setActivePromptTab(tab) {
   promptNavItems.forEach((item) => {
     const active = item.dataset.promptTab === tab;
     item.classList.toggle("active", active);
-    item.setAttribute("aria-pressed", String(active));
+    item.setAttribute("aria-expanded", String(active));
   });
   promptPanels.forEach((panel) => {
     panel.classList.toggle("active", panel.dataset.promptPanel === tab);

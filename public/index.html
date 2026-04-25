@@ -11,58 +11,50 @@
 
       <section id="assistantDrawer" class="restaurant-panel" aria-label="Restaurant selection">
         <div class="panel-shell">
-          <div class="brand-row">
-            <img class="brand-mark" src="https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=240&q=80" alt="Burger">
-            <div>
-              <p class="eyebrow">JhaPay AI</p>
-              <h1>Conversational Commerce</h1>
-            </div>
-            <button type="button" id="mobilePanelClose" class="drawer-close" aria-label="Close menu">Close</button>
+          <div class="drawer-header">
+            <strong class="drawer-wordmark">JhaPay</strong>
+            <button type="button" id="mobilePanelClose" class="icon-button drawer-close" aria-label="Close menu">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="3" y="5" width="18" height="14" rx="2.5"/>
+                <line x1="9" y1="5" x2="9" y2="19"/>
+              </svg>
+            </button>
           </div>
 
           <div id="panelContent" class="panel-content">
-            <label for="restaurantSelect">Pickup location</label>
-            <select id="restaurantSelect"></select>
+            <nav class="drawer-nav" aria-label="Chat actions">
+              <button type="button" id="newChatButton" class="drawer-row">
+                <svg class="drawer-row-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <line x1="12" y1="5" x2="12" y2="19"/>
+                  <line x1="5" y1="12" x2="19" y2="12"/>
+                </svg>
+                <span>New chat</span>
+              </button>
+              <button type="button" id="endChatButton" class="drawer-row">
+                <svg class="drawer-row-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <circle cx="12" cy="12" r="9"/>
+                  <line x1="9" y1="9" x2="15" y2="15"/>
+                  <line x1="15" y1="9" x2="9" y2="15"/>
+                </svg>
+                <span>End chat</span>
+              </button>
+            </nav>
 
-            <div class="chat-actions">
-              <button type="button" id="newChatButton">New chat</button>
-              <button type="button" id="endChatButton" class="secondary-action">End chat</button>
+            <div class="drawer-section">
+              <p class="drawer-section-label">Pickup location</p>
+              <select id="restaurantSelect" aria-label="Pickup location"></select>
             </div>
 
-            <section class="ai-helper-card" aria-label="AI starter">
-              <p class="prompt-label">AI Co-pilot</p>
-              <h2>Start with one smart move</h2>
-              <p>Pick a mode on the left and I’ll surface the most useful next prompts, like ChatGPT suggestions instead of a long menu.</p>
-            </section>
-
-            <section class="prompt-workspace" aria-label="Prompt workspace">
-              <nav class="prompt-sidebar" aria-label="Prompt modes">
-                <button type="button" class="prompt-nav-item active" data-prompt-tab="discovery">
+            <div class="drawer-section">
+              <p class="drawer-section-label">Modes</p>
+              <nav class="prompt-accordion" aria-label="Prompt modes">
+              <div class="prompt-accordion-item">
+                <button type="button" class="prompt-nav-item active" data-prompt-tab="discovery" aria-expanded="true" aria-controls="prompt-panel-discovery">
                   <strong>Discovery</strong>
                   <span>Find the right place or meal fast</span>
                 </button>
-                <button type="button" class="prompt-nav-item" data-prompt-tab="ordering">
-                  <strong>Ordering</strong>
-                  <span>Draft, edit, or place an order</span>
-                </button>
-                <button type="button" class="prompt-nav-item" data-prompt-tab="payments">
-                  <strong>Payments</strong>
-                  <span>Wallet, split bill, QR, recharge</span>
-                </button>
-                <button type="button" class="prompt-nav-item" data-prompt-tab="rewards">
-                  <strong>Rewards</strong>
-                  <span>Points, coupons, cashback, deals</span>
-                </button>
-                <button type="button" class="prompt-nav-item" data-prompt-tab="smart_ai">
-                  <strong>Smart AI</strong>
-                  <span>History, suggestions, planning</span>
-                </button>
-              </nav>
-
-              <div class="prompt-stage">
-                <section class="prompt-panel active" data-prompt-panel="discovery">
+                <section id="prompt-panel-discovery" class="prompt-panel active" data-prompt-panel="discovery">
                   <p class="prompt-panel-kicker">Discovery Mode</p>
-                  <h2>Explore like an AI concierge</h2>
                   <p>Ask naturally or tap one of these high-signal starts.</p>
                   <div class="prompt-group prompt-grid">
                     <button type="button" data-prompt="Best burgers near me under $20">Burgers under $20</button>
@@ -73,10 +65,15 @@
                     <button type="button" data-prompt="Late-night food after 11pm">Late night</button>
                   </div>
                 </section>
+              </div>
 
-                <section class="prompt-panel" data-prompt-panel="ordering">
+              <div class="prompt-accordion-item">
+                <button type="button" class="prompt-nav-item" data-prompt-tab="ordering" aria-expanded="false" aria-controls="prompt-panel-ordering">
+                  <strong>Ordering</strong>
+                  <span>Draft, edit, or place an order</span>
+                </button>
+                <section id="prompt-panel-ordering" class="prompt-panel" data-prompt-panel="ordering">
                   <p class="prompt-panel-kicker">Ordering Mode</p>
-                  <h2>Move from idea to checkout</h2>
                   <p>Fast actions for building or updating an order without friction.</p>
                   <div class="prompt-group prompt-grid">
                     <button type="button" data-prompt="I want to order a bacon avocado burger combo">Draft order</button>
@@ -87,10 +84,15 @@
                     <button type="button" data-prompt="Order for delivery to my home">Delivery</button>
                   </div>
                 </section>
+              </div>
 
-                <section class="prompt-panel" data-prompt-panel="payments">
+              <div class="prompt-accordion-item">
+                <button type="button" class="prompt-nav-item" data-prompt-tab="payments" aria-expanded="false" aria-controls="prompt-panel-payments">
+                  <strong>Payments</strong>
+                  <span>Wallet, split bill, QR, recharge</span>
+                </button>
+                <section id="prompt-panel-payments" class="prompt-panel" data-prompt-panel="payments">
                   <p class="prompt-panel-kicker">Payments Mode</p>
-                  <h2>Handle money without hunting</h2>
                   <p>Wallet actions, split flows, and payment tools in one place.</p>
                   <div class="prompt-group prompt-grid">
                     <button type="button" data-prompt="Pay my bill with JhaPay wallet">Pay with wallet</button>
@@ -101,10 +103,15 @@
                     <button type="button" data-prompt="Request payment from friend">Request payment</button>
                   </div>
                 </section>
+              </div>
 
-                <section class="prompt-panel" data-prompt-panel="rewards">
+              <div class="prompt-accordion-item">
+                <button type="button" class="prompt-nav-item" data-prompt-tab="rewards" aria-expanded="false" aria-controls="prompt-panel-rewards">
+                  <strong>Rewards</strong>
+                  <span>Points, coupons, cashback, deals</span>
+                </button>
+                <section id="prompt-panel-rewards" class="prompt-panel" data-prompt-panel="rewards">
                   <p class="prompt-panel-kicker">Rewards Mode</p>
-                  <h2>Save automatically, not manually</h2>
                   <p>See what you’ve earned and apply the best savings quickly.</p>
                   <div class="prompt-group prompt-grid">
                     <button type="button" data-prompt="How many points do I have?">My points</button>
@@ -115,10 +122,15 @@
                     <button type="button" data-prompt="Am I close to any reward milestone?">Milestones</button>
                   </div>
                 </section>
+              </div>
 
-                <section class="prompt-panel" data-prompt-panel="smart_ai">
+              <div class="prompt-accordion-item">
+                <button type="button" class="prompt-nav-item" data-prompt-tab="smart_ai" aria-expanded="false" aria-controls="prompt-panel-smart_ai">
+                  <strong>Smart AI</strong>
+                  <span>History, suggestions, planning</span>
+                </button>
+                <section id="prompt-panel-smart_ai" class="prompt-panel" data-prompt-panel="smart_ai">
                   <p class="prompt-panel-kicker">Smart AI Mode</p>
-                  <h2>Let the assistant guide the decision</h2>
                   <p>Use history, taste, and planning prompts instead of starting from scratch.</p>
                   <div class="prompt-group prompt-grid">
                     <button type="button" data-prompt="Show my last 5 transactions">Last transactions</button>
@@ -130,13 +142,10 @@
                   </div>
                 </section>
               </div>
-            </section>
-
-            <div class="guardrail">
-              <strong>Live demo:</strong> discovery, ordering, rewards, history, wallet actions, and smart suggestions.
-              <br>
-              <strong>Safely gated:</strong> vendor payments and private business data remain blocked.
+              </nav>
             </div>
+
+            <p class="guardrail">Live demo for discovery, ordering, rewards, history, and wallet actions. Vendor payments and private business data remain gated.</p>
           </div>
         </div>
       </section>
@@ -145,17 +154,42 @@
 
       <section class="chat-panel" aria-label="AI chat">
         <header class="mobile-chat-header">
-          <button type="button" id="mobileMenuButton" class="mobile-menu-button" aria-expanded="false" aria-controls="assistantDrawer">Menu</button>
+          <button type="button" id="mobileMenuButton" class="icon-button mobile-menu-button" aria-expanded="false" aria-controls="assistantDrawer" aria-label="Open menu">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="3" y="5" width="18" height="14" rx="2.5"/>
+              <line x1="9" y1="5" x2="9" y2="19"/>
+            </svg>
+          </button>
           <div class="mobile-chat-title">
             <strong>JhaPay AI</strong>
-            <span>Conversational commerce</span>
           </div>
-          <button type="button" id="mobileHeaderNewChat" class="mobile-header-action">New</button>
+          <button type="button" id="mobileHeaderNewChat" class="icon-button mobile-header-action" aria-label="New chat">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 20h9"/>
+              <path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/>
+            </svg>
+          </button>
         </header>
         <div id="messages" class="messages" aria-live="polite"></div>
         <form id="chatForm" class="composer">
-          <input id="messageInput" name="message" autocomplete="off" placeholder="Ask anything - orders, rewards, payments, history, or smart suggestions..." required>
-          <button type="submit">Send</button>
+          <div class="composer-card">
+            <input id="messageInput" name="message" autocomplete="off" placeholder="Reply..." required>
+            <div class="composer-row">
+              <button type="button" class="icon-button composer-attach" aria-label="Add">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <line x1="12" y1="5" x2="12" y2="19"/>
+                  <line x1="5" y1="12" x2="19" y2="12"/>
+                </svg>
+              </button>
+              <button type="submit" class="composer-send" aria-label="Send">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <line x1="12" y1="19" x2="12" y2="5"/>
+                  <polyline points="5 12 12 5 19 12"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+          <p class="composer-disclaimer">JhaPay AI can make mistakes. Verify before paying.</p>
         </form>
       </section>
 
