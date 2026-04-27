@@ -3,13 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "description": "AI-safe restaurant chat and order API demo for a US food chain.",
-  "main": "src/server.js",
   "scripts": {
     "dev": "node src/server.js",
     "start": "node src/server.js",
     "smoke": "node src/smoke-test.js"
   },
   "dependencies": {
+    "dotenv": "^17.4.2",
     "pg": "^8.13.1"
   },
   "engines": {

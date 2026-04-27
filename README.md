@@ -1,508 +1,397 @@
-# Olympic Flame Burgers - AI Chat + Ordering Demo
+<div align="center">
 
-Reference architecture for an AI-powered restaurant ordering assistant for a
-multi-location US food chain.
+# 🍔 JhaPay AI
 
-The goal is simple: your main product should not need to know how the AI,
-database, safety rules, demand ranking, or ordering logic work internally. It
-only calls the API layer.
+**A conversational commerce assistant for restaurants, orders, wallet, and rewards.**
 
-```text
-main product / website / mobile app
-        |
-        |  HTTPS API calls
-        v
-AI Restaurant API
+Provider-agnostic LLM chat with a guarded tool boundary, deterministic money-flow,
+and a mobile-first UI in the spirit of Claude.
+
+[![Node](https://img.shields.io/badge/node-%3E%3D18-339933?logo=node.js&logoColor=white)](https://nodejs.org)
+[![Vercel-ready](https://img.shields.io/badge/deploy-vercel-000000?logo=vercel&logoColor=white)](https://vercel.com)
+[![OpenAI-compat](https://img.shields.io/badge/LLM-OpenAI--compatible-412991?logo=openai&logoColor=white)](#-plug-in-any-model)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](#license)
+
+</div>
+
+---
+
+## ✨ What it does
+
+A chat interface that turns natural language into safe actions on a restaurant + wallet API:
+
+- 🔍 **Discovery** — find restaurants, hours, menu items by price / dietary / day-part
+- 🧾 **Ordering** — draft, modify, confirm, cancel; pickup or delivery
+- 💳 **Payments** — wallet balance, recharge, split bill, QR pay, request, tip-and-close
+- 🎁 **Rewards** — points, coupons, cashback, milestones, auto-apply best discount
+- 🧠 **Smart AI** — order history, spend insights, personalized "you'd like this", group meal planning
+- 🔒 **Guardrails** — sales counts, payroll, payment tokens, vendor data are never reachable
+
+> The LLM only ever sees a small, audited tool surface — it cannot run raw SQL, see private business data, or pretend an order was placed.
+
+---
+
+## 🚀 Quick start
+
+```bash
+git clone <repo>
+cd jhax-ai-chat-bot
+npm install
+cp .env.example .env       # then edit .env (see below)
+npm run dev
 ```
 
-## What This Demo Covers
+Open <http://localhost:3000> and chat.
 
-This demo shows how to build an AI chat window that can:
+### Choose a model provider
 
-- answer menu questions
-- recommend food by lunch/dinner demand
-- show restaurant locations and hours
-- build a multi-item order
-- support item quantity
-- draft an order before placing it
-- confirm an order only after user approval
-- cancel a draft order
-- show pickup location
-- show a short customer-friendly order number
-- show JhaPay wallet balance and remaining amount
-- refuse sales, payroll, payment-token, and private business questions
+Edit `.env` with one of these — any OpenAI-compatible endpoint works.
 
-The sample restaurant data is inspired by public Olympic Flame Burgers
-information. The official public data currently exposes three real locations;
-the demo includes seven extra demo branches so the system behaves like a
-10-location food chain.
+<details>
+<summary><b>🆓 Groq (free, fastest, no credit card)</b></summary>
 
-## High-Level Infrastructure
+Sign up at <https://console.groq.com>:
+
+```ini
+OPENAI_API_KEY=gsk_...
+OPENAI_BASE_URL=https://api.groq.com/openai/v1
+OPENAI_MODEL=llama-3.3-70b-versatile
+```
+</details>
+
+<details>
+<summary><b>🆓 OpenRouter free-tier (one key, many models)</b></summary>
+
+Sign up at <https://openrouter.ai/keys>, browse `:free` models at <https://openrouter.ai/models?max_price=0>:
+
+```ini
+OPENAI_API_KEY=sk-or-v1-...
+OPENAI_BASE_URL=https://openrouter.ai/api/v1
+OPENAI_MODEL=meta-llama/llama-3.3-70b-instruct:free
+```
+</details>
+
+<details>
+<summary><b>🆓 Google Gemini free tier</b></summary>
+
+Get a key at <https://aistudio.google.com/apikey>:
+
+```ini
+OPENAI_API_KEY=AIza...
+OPENAI_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/
+OPENAI_MODEL=gemini-2.0-flash
+```
+</details>
+
+<details>
+<summary><b>💰 OpenAI direct</b></summary>
+
+```ini
+OPENAI_API_KEY=sk-...
+OPENAI_BASE_URL=https://api.openai.com/v1
+OPENAI_MODEL=gpt-4o-mini
+```
+</details>
+
+<details>
+<summary><b>🖥️ Local Ollama / vLLM / LM Studio</b></summary>
+
+```ini
+OPENAI_API_KEY=ollama
+OPENAI_BASE_URL=http://localhost:11434/v1
+OPENAI_MODEL=llama3.1
+```
+</details>
+
+> Without an API key, the demo still works — it falls back to a deterministic local responder.
+
+---
+
+## 🏗️ Architecture
 
 ```text
-Customer chat window
-        |
-        v
-Restaurant AI API
-        |
-        v
-AI brain + guardrails
-        |
-        v
-MCP-style tool layer
-        |
-        v
-Safe restaurant data layer
-        |
-        +--> menu, locations, hours, orders
-        |
-        +--> private back-office data stays blocked
+                     ┌──────────────────────────┐
+                     │   Mobile / Web Client    │
+                     │   (Claude-style UI)      │
+                     └────────────┬─────────────┘
+                                  │ HTTPS / SSE
+                                  ▼
+                     ┌──────────────────────────┐
+                     │  Restaurant AI API       │   src/server.js
+                     │  CORS · streaming · log  │
+                     └────────────┬─────────────┘
+                                  ▼
+                     ┌──────────────────────────┐
+                     │  AI Brain                │   src/aiBrain.js
+                     │  ├── Intent router       │     deterministic for money/order
+                     │  ├── Scope guard prompt  │     refuses creative / off-topic
+                     │  └── LLM dispatcher      │     OpenAI-compatible fetch
+                     └────────────┬─────────────┘
+                                  ▼
+                     ┌──────────────────────────┐
+                     │  MCP Tool Engine         │   src/mcpEngine.js
+                     │  audited tool surface    │   20+ JSON-schema'd tools
+                     └────────────┬─────────────┘
+                                  ▼
+                     ┌──────────────────────────┐
+                     │  Data Layer              │   src/db.js
+                     │  Postgres or in-memory   │
+                     └──────────────────────────┘
 ```
 
-## Technology Stack
+### Where the LLM is — and isn't
 
-| Layer | Technology |
-| --- | --- |
-| API runtime | Node.js |
-| API style | HTTP JSON APIs |
-| AI tool boundary | MCP-style tool engine |
-| Data store | Postgres-ready schema |
-| Demo fallback | In-memory restaurant data |
-| Browser demo | HTML, CSS, JavaScript |
-| Local database | Docker Compose + Postgres |
-| Optional LLM | OpenAI-compatible chat model |
+The brain is **hybrid by design**:
 
-The current demo uses Node's native HTTP runtime to stay lightweight. In
-production, the same API contract can be moved to Express, Fastify, or another
-Node framework without changing the product integration surface.
+| Path | Handler | Why |
+|---|---|---|
+| Free-form discovery, menu, payments-info, rewards, smart-AI | **LLM** with retrieved RAG context | Natural language is the value-add |
+| Order state (draft / confirm / cancel) | **Deterministic** regex + tool execution | Money and "is the order placed?" must never hallucinate |
+| Blocked categories (sales, payroll, tokens) | **Deterministic refusal** | Never reaches the model |
 
-## Layered Model
+This split lives in [`shouldUseDeterministicReply()`](src/aiBrain.js#L830) gated by `RAG_ELIGIBLE_INTENTS`.
 
-```text
-main product
-    |
-    |  POST /api/chat
-    |  GET  /api/restaurants
-    |  GET  /api/menu/search
-    v
-+-----------------------+
-| AI Restaurant API     |
-| auth, CORS, logging   |
-+-----------+-----------+
-            |
-            v
-+-----------------------+
-| AI Brain              |
-| intent + safe replies |
-+-----------+-----------+
-            |
-            v
-+-----------------------+
-| MCP Tool Layer        |
-| fixed tool surface    |
-+-----------+-----------+
-            |
-            v
-+-----------------------+
-| Postgres / Data Layer |
-| safe schema only      |
-+-----------------------+
+---
+
+## 🔌 Plug in any model
+
+The LLM call is one `fetch` to an OpenAI-compatible endpoint. Swap the provider with two env vars — **no code change**.
+
+```js
+// src/aiBrain.js (excerpt)
+fetch(`${process.env.OPENAI_BASE_URL}/chat/completions`, {
+  method: "POST",
+  headers: { "Content-Type": "application/json", Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
+  body: JSON.stringify({
+    model: process.env.OPENAI_MODEL,
+    temperature: 0,
+    messages: [...]
+  })
+});
 ```
 
-## AI Tool Surface
+This works because every modern provider speaks OpenAI's `/v1/chat/completions` schema — Groq, OpenRouter, Together, Fireworks, Cerebras, Anyscale, Ollama, vLLM, LM Studio, and OpenAI itself.
 
-The AI does not get raw database access. It can only call a small set of
-approved tools.
+> 📄 See [docs/architecture-decisions.md](#-why-no-langchain--langgraph) for why we don't add LangChain on top.
+
+---
+
+## 🛡️ AI tool surface (the security perimeter)
+
+The model can **only** invoke functions from this allow-list. There is no path to raw SQL, no path to private business data.
 
 ```text
-list_restaurants
-search_menu
-create_order_draft
-confirm_order
-cancel_order
-get_order
+Discovery:    list_restaurants · search_menu
+Ordering:     create_order_draft · confirm_order · cancel_order · get_order
+Rewards:      get_rewards_summary · apply_best_rewards · get_cashback_offers
+Wallet:       recharge_wallet · split_bill · create_qr_payment · request_payment
+              pay_invoice · tip_and_close
+History:      get_transaction_history · get_spend_insights · get_order_history
+              reorder_last_order · get_receipts
+Smart AI:     get_personalized_recommendations · save_deal_alert
 ```
 
-There is no tool for:
+Tools the model **cannot** call (because they don't exist on the tool surface):
+**sales reports · payroll · payment tokens · vendor contracts · admin · raw SQL**
 
-- sales reports
-- payroll
-- payment tokens
-- customer private data
-- vendor contracts
-- admin data
-- raw SQL
+If the tool doesn't exist, the AI cannot use it. ✅
 
-This is the main security idea: if the tool does not exist, the AI cannot use
-it.
+---
 
-## Safety Layers
+## 📱 Mobile UI
 
-| Layer | Purpose |
-| --- | --- |
-| AI guardrails | Keeps the assistant focused on food, locations, hours, and orders |
-| Tool boundary | Only approved restaurant tools are available |
-| Database role | AI-facing role can read/write only safe tables |
-| Private schema | Sales, payroll, and payment-token data remain blocked |
-| Order confirmation | AI can draft, but user must confirm before placing |
-| Audit log | Tool calls can be recorded for review and compliance |
+The chat is designed mobile-first in the spirit of Claude's mobile app:
 
-Example blocked questions:
+- Sidebar-toggle icon (hamburger replaced) opens a slim drawer
+- Drawer rows: New chat · End chat · Pickup location · Modes
+- Modes accordion: Discovery · Ordering · Payments · Rewards · Smart AI
+- Composer card with `+` (left) and circular send (right)
+- Disclaimer line ("AI can make mistakes")
+- Serif typography for assistant prose, light-gray pill for user
+- Warm neutral palette · zero shadows · subtle borders
 
-```text
-how many tacos are you selling?
-what were yesterday sales?
-show payroll
-show payment tokens
-```
+Files: [`public/index.html`](public/index.html) · [`public/styles.css`](public/styles.css) · [`public/app.js`](public/app.js)
 
-The assistant responds politely and redirects the user back to menu, location,
-hours, or ordering help.
+---
 
-## Product Integration Surface
-
-Your main product can integrate using these APIs.
+## 📡 API surface
 
 ```text
-GET  /health
+GET  /api/health
 GET  /api/restaurants
 GET  /api/menu/search
-POST /api/chat
+POST /api/chat                    JSON request / response
+POST /api/chat/stream             SSE token stream
 POST /api/orders/draft
-POST /api/orders/{orderId}/confirm
-POST /api/orders/{orderId}/cancel
-GET  /api/orders/{orderId}
+POST /api/orders/{id}/confirm
+POST /api/orders/{id}/cancel
+GET  /api/orders/{id}
+GET  /api/mcp/tools               tool registry introspection
 ```
 
-For a production version, these can be versioned as:
-
-```text
-POST /v1/chat
-GET  /v1/restaurants
-GET  /v1/menu
-POST /v1/orders/draft
-POST /v1/orders/{orderId}/confirm
-POST /v1/orders/{orderId}/cancel
-```
-
-## Main Chat Flow
-
-```text
-User asks a question
-        |
-        v
-API receives message
-        |
-        v
-AI brain classifies intent
-        |
-        +--> menu question       -> search safe menu data
-        +--> location question   -> list restaurants and hours
-        +--> order request       -> create draft order
-        +--> confirm             -> place order
-        +--> cancel              -> cancel draft
-        +--> private question    -> refuse politely
-```
-
-## Ordering Flow
-
-```text
-User asks for food
-        |
-        v
-AI shows menu cards
-        |
-        v
-User selects item quantity
-        |
-        v
-Draft order is created
-        |
-        +--> user confirms -> order confirmed
-        |
-        +--> user cancels  -> order cancelled
-```
-
-The order screen supports:
-
-- multiple items
-- quantity changes
-- draft order summary
-- confirm button
-- cancel button
-- pickup location
-- JhaPay wallet summary
-- estimated pickup time
-- customer-friendly short order id
-
-Example customer-facing order id:
-
-```text
-#165909
-```
-
-The long internal id stays hidden from the customer UI.
-
-## JhaPay Wallet Demo
-
-The order card shows a wallet summary:
-
-```text
-JhaPay Wallet
-Current balance
-Order total
-Remaining after order
-```
-
-UI behavior:
-
-- JhaPay signature is green.
-- Order total is highlighted in red.
-- Remaining wallet balance is highlighted in green.
-- Confirmation message includes estimated pickup time.
-
-Example final message:
-
-```text
-Your order is confirmed.
-Order #165909
-Pickup: Olympic Flame Burgers - Hesperia, 16304 Main St, Hesperia, CA 92345
-JhaPay remaining after this order: $46.87
-Estimated pickup time: 15 minutes.
-Enjoy your food.
-```
-
-## Demand-Aware Recommendations
-
-The system supports demand-based recommendations.
-
-Example user question:
-
-```text
-which tacos best?
-```
-
-The recommendation layer:
-
-- checks the selected restaurant
-- gets the restaurant's local time
-- infers breakfast, lunch, or dinner
-- searches only text-matching menu items
-- ranks matches by demand score
-- shows a clean "Popular now" marker
-- avoids unrelated popular items
-
-Important behavior:
-
-```text
-tacos search -> taco items only
-```
-
-Popular burgers or fries will not appear just because they have high demand.
-
-## Location + Hours Experience
-
-When the user asks:
-
-```text
-show me locations and hours
-```
-
-The chat shows location cards with:
-
-- restaurant photo
-- city and branch name
-- live/demo badge
-- address
-- phone
-- Sun-Thu hours
-- Fri-Sat hours
-- Use this pickup button
-
-## UI Features
-
-The demo chat window includes:
-
-- sticky left restaurant panel
-- scrollable chat area
-- visual menu cards with photos
-- visual location cards with hours
-- clean demand badges
-- quantity selector
-- draft order builder
-- confirm/cancel actions
-- short highlighted order id
-- JhaPay wallet block
-- new chat and end chat controls
-
-## Database Model
-
-The database is designed around two zones.
-
-```text
-safe AI zone
-    restaurants
-    menu categories
-    menu items
-    item availability
-    orders
-    order items
-    tool audit log
-
-private back-office zone
-    sales reports
-    payroll
-    payment tokens
-```
-
-The AI-facing database role receives access only to the safe zone.
-
-Private data can exist in the same Postgres database, but it is not reachable
-by the AI API role.
-
-## Running The Demo
-
-Run with in-memory data:
+### Example request
 
 ```bash
-npm install
-npm run dev
+curl -s http://localhost:3000/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message":"what cheap eats do you have under 10 dollars?"}'
 ```
 
-Default URL:
-
-```text
-http://localhost:3000
+```jsonc
+{
+  "sessionId": "...",
+  "reply": "Here are some cheap eats under $10: ...",
+  "context": {
+    "intent": "menu_answer",
+    "menuItems": [...]
+  }
+}
 ```
 
-Run on another port:
+---
 
-```bash
-PORT=3001 npm run dev
-```
-
-PowerShell:
-
-```powershell
-$env:PORT="3001"
-npm run dev
-```
-
-## Running With Postgres
-
-Start the local database:
-
-```bash
-docker compose up -d
-```
-
-Use the demo connection string:
-
-```text
-postgres://ai_app:ai_demo_password@localhost:5432/olympic_ai_demo
-```
-
-Then start the API.
-
-## Optional LLM Mode
-
-The demo runs without an LLM key by using a deterministic local responder.
-
-For real AI responses, configure:
-
-```text
-OPENAI_API_KEY
-OPENAI_BASE_URL
-OPENAI_MODEL
-```
-
-The LLM still only receives safe tool results. It does not receive raw database
-access.
-
-## Smoke Test Coverage
-
-The smoke test validates:
-
-- 10 restaurant records
-- demand-aware taco ranking
-- tacos-only search filtering
-- multi-item draft order
-- short display order id
-- pickup location
-- confirmed order status
-- JhaPay remaining balance
-- estimated pickup time
-
-Run:
+## 🧪 Smoke test
 
 ```bash
 npm run smoke
 ```
 
-## Production Upgrade Path
+Verifies:
 
-Before production, connect:
+- ✅ Restaurant catalog loaded (10 locations: 3 real + 7 demo)
+- ✅ Demand-aware taco ranking
+- ✅ Tacos-only filter (popular burgers don't leak in)
+- ✅ Multi-item draft order
+- ✅ Customer-friendly order id
+- ✅ Confirmed order status
+- ✅ JhaPay wallet remaining balance
+- ✅ Estimated pickup time
 
-- real POS provider
-- real menu source
-- real payment/wallet provider
-- real customer identity/session system
-- Redis or another shared session store
-- API authentication
-- rate limiting
-- observability
-- audit dashboards
-- deployment pipeline
+---
 
-Recommended production shape:
+## 🐘 Run with Postgres (optional)
 
-```text
-Customer UI
-    -> Restaurant AI API
-    -> MCP tool layer
-    -> safe database views/functions
-    -> POS and wallet integrations
+```bash
+docker compose up -d
 ```
 
-## POS Integration Note
+Add to `.env`:
 
-The ordering tool can be connected to a real POS provider. The important part
-is to keep the external tool contract stable:
-
-```text
-create_order_draft
-confirm_order
-cancel_order
-get_order
+```ini
+DATABASE_URL=postgres://ai_app:ai_demo_password@localhost:5432/olympic_ai_demo
 ```
 
-That way the AI brain and product API do not need to change when the order
-backend changes.
+The data layer is split into two zones — the AI-facing role only sees the **safe** zone:
 
-## Demo Data
+```text
+🟢  safe AI zone                 🔴  private back-office zone
+    restaurants                       sales reports
+    menu categories                   payroll
+    menu items                        payment tokens
+    item availability                 vendor contracts
+    orders / order_items
+    tool audit log
+```
 
-Real public locations represented:
+Same Postgres database, different role permissions.
 
-- Hesperia
-- Torrance
-- Colton
+---
 
-Additional demo locations represented:
+## 🧠 Why no LangChain / LangGraph
 
-- Anaheim
-- Riverside
-- Pasadena
-- Long Beach
-- Irvine
-- Ontario
-- San Diego
+Short version: **the OpenAI-compatible endpoint already gives us provider-swap freedom for free**, and our chat is a linear pipeline — adding a state-graph DSL doesn't reduce code, it adds boilerplate.
 
-Menu data includes breakfast, burgers, combos, Mexican food, sandwiches, sides,
-kids meals, and drinks.
+| What we'd gain | What we'd pay |
+|---|---|
+| Memory primitives | ~5–10 MB of deps · 150–250 ms cold-start tax |
+| Prebuilt tool-call loop (~50 lines we'd otherwise write) | LangChain's frequent breaking major versions |
+| Real streaming abstraction | Loss of one-fetch cost transparency |
+| LangSmith tracing | Lock-in to LangChain's tool format |
 
-## Source Inspiration
+LangGraph's leverage is on **multi-agent** workloads (handoffs, parallel branches, supervisor patterns). We have one assistant, one turn. It's the wrong abstraction for our shape.
 
-- Official Olympic Flame Burgers site: `https://olympicflameburgers.com/`
-- Public menu snapshots used as seed inspiration:
-  - `https://olympic-flame-burgers.res-menu.net/menu`
-  - `https://olympic-flame-burgers.res-menu.com/menu`
+**Reconsider when:** multi-step agentic planning, agent-to-agent handoffs, cross-provider feature blending, or LangSmith-grade evals become real needs. Until then, a hand-written pipeline is faster, cheaper, more debuggable, and provider-agnostic in a way the framework actively isn't.
+
+---
+
+## 🎁 Bonus: scope-guarded prompt
+
+The system prompt restricts the model to JhaPay-only topics with a fixed refusal template — see [`BASE_SYSTEM_PROMPT`](src/aiBrain.js#L57).
+
+```text
+SCOPE — you only answer questions about:
+- JhaPay restaurants, locations, hours, menus, prices
+- Orders (draft, modify, confirm, cancel, status, history)
+- JhaPay wallet (balance, recharge, pay, split, QR, request)
+- Rewards (points, coupons, cashback, milestones, discounts)
+
+REFUSE everything else (poems, jokes, code, math, world knowledge,
+role-play). Reply with exactly:
+"I can only help with JhaPay restaurants, orders, wallet, and rewards.
+What can I help you with there?"
+```
+
+---
+
+## 🗂️ Project layout
+
+```text
+jhax-ai-chat-bot/
+├── api/[...path].js          # Vercel handler (defers to src/server)
+├── public/
+│   ├── index.html            # Chat UI shell
+│   ├── styles.css            # Mobile-first Claude-style theme
+│   └── app.js                # Streaming chat + drawer + accordion
+├── src/
+│   ├── server.js             # HTTP + SSE + routing
+│   ├── aiBrain.js            # Intent · scope guard · LLM dispatch
+│   ├── mcpEngine.js          # 20+ JSON-schema'd tools
+│   ├── rag.js                # Pillar-scoped context retrieval
+│   ├── db.js                 # Postgres / in-memory store
+│   ├── demoData.js           # Seed restaurants + menu items
+│   └── smoke-test.js         # End-to-end smoke suite
+├── .env.example              # Provider configs (free + paid options)
+└── vercel.json               # Vercel routing
+```
+
+---
+
+## 🚢 Production upgrade path
+
+Before shipping for real, replace the demo stubs with:
+
+- 🔐 Real auth (customer identity + session)
+- 🛒 Real POS provider (keep `create_order_draft` / `confirm_order` contracts stable)
+- 💳 Real payment / wallet provider
+- 📋 Real menu source (probably your existing CMS or POS feed)
+- 🗄️ Shared session store (Redis)
+- 🚦 API auth + rate limiting
+- 📊 Observability (OpenTelemetry traces, error tracking)
+- 📜 Audit dashboards (the tool audit log is already wired)
+- 🚀 CI/CD pipeline
+
+---
+
+## 📦 Demo data
+
+Real public locations represented: **Hesperia · Torrance · Colton**
+
+Demo locations (synthetic): Anaheim · Riverside · Pasadena · Long Beach · Irvine · Ontario · San Diego
+
+Menu spans breakfast · burgers · combos · Mexican · sandwiches · sides · kids meals · drinks. Inspired by public Olympic Flame Burgers data.
+
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE) (add one if you don't have it yet).
+
+---
+
+<div align="center">
+
+**Built as a reference architecture for AI-safe restaurant commerce.**
+
+If this helped, ⭐ the repo. PRs welcome.
+
+</div>
