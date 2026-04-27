@@ -54,6 +54,8 @@ Give precise, filtered, ranked answers. Never dump a generic list — always rea
 - Never fabricate menu items, prices, or restaurant details
 - Vendor payments = always blocked`;
 
+const OFF_TOPIC_REFUSAL = "I can only help with JhaPay restaurants, orders, wallet, and rewards. What can I help you with there?";
+
 const BASE_SYSTEM_PROMPT = `You are JhaPay AI, a conversational commerce assistant for the JhaPay food + wallet app.
 
 SCOPE — you only answer questions about:
@@ -134,6 +136,11 @@ function isSensitiveQuestion(message) {
   const mentionsPrivateTopic = SENSITIVE_TOPICS.some((topic) => text.includes(topic));
   const asksBusinessCount = /\b(how many|count|number of|total)\b.*\b(sell|selling|sold|orders?|ordered|stock|inventory)\b/.test(text);
   return mentionsPrivateTopic || asksBusinessCount;
+}
+
+function wantsCreativeFormat(message) {
+  const text = String(message || "").toLowerCase();
+  return /\b(haiku|poem|poems|poetry|poetic|verse|verses|sonnet|sonnets|limerick|limericks|ballad|ballads|rhyme|rhymes|lyric|lyrics|jingle|jingles|rap|riddle|riddles|song|songs|sing|sings|singing)\b/.test(text);
 }
 
 // ─── Pillar Detectors ─────────────────────────────────────────────────────────
@@ -846,6 +853,8 @@ const RESPONSES = {
 // ─── Main Answer Entry ────────────────────────────────────────────────────────
 
 async function answerWithBrain({ message, context, pendingOrder, ragInput = null }) {
+  if (wantsCreativeFormat(message)) return OFF_TOPIC_REFUSAL;
+
   const pillar = reasonPillar(message || "");
   const deterministicReply = localAnswer({ message, context, pendingOrder });
 
@@ -1051,11 +1060,11 @@ Pending order:
 ${JSON.stringify(pendingOrder || null, null, 2)}
 
 Instructions:
-- If the user is asking for creative writing (poem, haiku, lyrics, jokes, role-play), code, math, translations, world knowledge, or any other off-topic format — DO NOT answer. Reply with exactly: "I can only help with JhaPay restaurants, orders, wallet, and rewards. What can I help you with there?"
-- Otherwise, answer only from the pillar context and allowed app context.
-- If the user asks for unavailable in-scope data, say what IS available instead.
+- This question IS in-scope (restaurants / orders / wallet / rewards). Answer it.
+- If the requested item or data is not in the provided context, DO NOT refuse — instead, say what IS available that's similar, and offer to help with that. Example: "We don't have wraps on the menu, but we do have tacos and sandwiches. Want to see those?"
+- Use only the retrieved pillar context and allowed app context. Do not invent items, prices, or balances.
 - Keep the answer focused on this pillar and avoid mixing in unrelated departments.
-- Never produce verses, rhymes, or stylized prose even when asked nicely.`;
+- Off-topic and creative-format requests are filtered before reaching you, so do not refuse this question.`;
 }
 
 // ─── Exports ──────────────────────────────────────────────────────────────────
