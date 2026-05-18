@@ -73,7 +73,7 @@ function setupVoiceInput() {
   const voiceIndicator = document.querySelector("#voiceIndicator");
   const composerCard = chatForm.querySelector(".composer-card");
   const defaultPlaceholder = messageInput.getAttribute("placeholder") || "Reply...";
-  const SILENCE_MS = 2500;
+  const SILENCE_MS = 3000;
   let baseValue = "";
   let silenceTimer = null;
   let cancelRequested = false;
