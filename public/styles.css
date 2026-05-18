@@ -1006,7 +1006,7 @@ button:hover {
     height: 36px;
     padding: 0;
     border: 0;
-    border-radius: 10px;
+    border-radius: 50%;
     background: transparent;
     color: var(--ink);
     cursor: pointer;
