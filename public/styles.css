@@ -1164,35 +1164,59 @@ button:hover {
     gap: 6px;
   }
 
-  .composer-attach,
-  .composer-mic {
+  .composer-attach {
     width: 32px;
     height: 32px;
     border-radius: 50%;
     color: var(--muted);
   }
 
-  .composer-attach:hover,
-  .composer-mic:hover {
+  .composer-attach:hover {
     background: var(--surface);
     color: var(--ink);
   }
 
-  .composer-mic.listening {
+  .composer-mic {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: var(--ink);
     color: var(--white);
+    cursor: pointer;
+    transition: background 160ms ease, transform 160ms ease;
+  }
+
+  .composer-mic:hover {
+    filter: brightness(0.92);
+  }
+
+  .composer-mic.listening {
     background: #c4332a;
+    color: var(--white);
     animation: micPulse 1.4s ease-in-out infinite;
   }
 
   .composer-mic.listening:hover {
     background: #a82a23;
-    color: var(--white);
   }
 
   @keyframes micPulse {
     0%, 100% { box-shadow: 0 0 0 0 rgba(196, 51, 42, 0.45); }
     50%      { box-shadow: 0 0 0 7px rgba(196, 51, 42, 0); }
   }
+
+  /* Show mic by default; swap to send only when there's text and not listening. */
+  .composer .composer-send { display: none; }
+  .composer.has-text:not(.is-listening) .composer-mic { display: none; }
+  .composer.has-text:not(.is-listening) .composer-send { display: inline-flex; }
+
+  /* Browsers without SpeechRecognition (Firefox): always show send. */
+  .composer.no-voice .composer-send { display: inline-flex; }
 
   .voice-indicator:not([hidden]) {
     display: flex;

@@ -54,7 +54,9 @@ chatForm.addEventListener("submit", async (event) => {
 
 function syncSendButton() {
   if (!sendButton) return;
-  sendButton.disabled = messageInput.value.trim().length === 0;
+  const empty = messageInput.value.trim().length === 0;
+  sendButton.disabled = empty;
+  chatForm.classList.toggle("has-text", !empty);
 }
 
 // ─── Voice Input ──────────────────────────────────────────────────────────────
@@ -62,7 +64,11 @@ function syncSendButton() {
 function setupVoiceInput() {
   if (!micButton) return;
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SpeechRecognition) return; // mic stays hidden on unsupported browsers (e.g. Firefox)
+  if (!SpeechRecognition) {
+    // mic stays hidden on unsupported browsers (e.g. Firefox); always show send instead.
+    chatForm.classList.add("no-voice");
+    return;
+  }
 
   const voiceIndicator = document.querySelector("#voiceIndicator");
   const composerCard = chatForm.querySelector(".composer-card");
@@ -83,6 +89,7 @@ function setupVoiceInput() {
   function showListeningUi() {
     if (voiceIndicator) voiceIndicator.hidden = false;
     if (composerCard) composerCard.classList.add("listening");
+    chatForm.classList.add("is-listening");
     micButton.classList.add("listening");
     micButton.setAttribute("aria-label", "Stop voice input");
     messageInput.setAttribute("placeholder", "Listening…");
@@ -91,6 +98,7 @@ function setupVoiceInput() {
   function hideListeningUi() {
     if (voiceIndicator) voiceIndicator.hidden = true;
     if (composerCard) composerCard.classList.remove("listening");
+    chatForm.classList.remove("is-listening");
     micButton.classList.remove("listening");
     micButton.setAttribute("aria-label", "Voice input");
     messageInput.setAttribute("placeholder", defaultPlaceholder);
