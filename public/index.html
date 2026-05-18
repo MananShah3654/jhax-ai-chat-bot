@@ -172,6 +172,12 @@
         </header>
         <div id="messages" class="messages" aria-live="polite"></div>
         <form id="chatForm" class="composer">
+          <div id="voiceIndicator" class="voice-indicator" hidden>
+            <span class="voice-bars" aria-hidden="true">
+              <span></span><span></span><span></span><span></span>
+            </span>
+            <span>Listening…</span>
+          </div>
           <div class="composer-card">
             <input id="messageInput" name="message" autocomplete="off" placeholder="Reply..." required>
             <div class="composer-row">
@@ -181,12 +187,22 @@
                   <line x1="5" y1="12" x2="19" y2="12"/>
                 </svg>
               </button>
-              <button type="submit" class="composer-send" aria-label="Send">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <line x1="12" y1="19" x2="12" y2="5"/>
-                  <polyline points="5 12 12 5 19 12"/>
-                </svg>
-              </button>
+              <div class="composer-row-actions">
+                <button type="button" id="composerMic" class="icon-button composer-mic" aria-label="Voice input" hidden>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="9" y="2" width="6" height="13" rx="3"/>
+                    <path d="M5 11v1a7 7 0 0 0 14 0v-1"/>
+                    <line x1="12" y1="19" x2="12" y2="23"/>
+                    <line x1="8" y1="23" x2="16" y2="23"/>
+                  </svg>
+                </button>
+                <button type="submit" class="composer-send" aria-label="Send">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <line x1="12" y1="19" x2="12" y2="5"/>
+                    <polyline points="5 12 12 5 19 12"/>
+                  </svg>
+                </button>
+              </div>
             </div>
           </div>
           <p class="composer-disclaimer">JhaPay AI can make mistakes. Verify before paying.</p>

@@ -13,8 +13,11 @@ const panelContent = document.querySelector("#panelContent");
 const promptNavItems = [...document.querySelectorAll("[data-prompt-tab]")];
 const promptPanels = [...document.querySelectorAll("[data-prompt-panel]")];
 const sendButton = chatForm.querySelector(".composer-send");
+const micButton = document.querySelector("#composerMic");
 let sessionId = window.localStorage.getItem("restaurantAiSessionId") || "";
 const cartItems = new Map();
+let speechRecognition = null;
+let isListening = false;
 
 bootstrap();
 
@@ -29,6 +32,7 @@ async function bootstrap() {
   bindPromptWorkspace();
   syncSendButton();
   messageInput.addEventListener("input", syncSendButton);
+  setupVoiceInput();
   document.querySelectorAll("[data-prompt]").forEach((btn) => {
     btn.addEventListener("click", () => {
       messageInput.value = btn.dataset.prompt;
@@ -51,6 +55,108 @@ chatForm.addEventListener("submit", async (event) => {
 function syncSendButton() {
   if (!sendButton) return;
   sendButton.disabled = messageInput.value.trim().length === 0;
+}
+
+// ─── Voice Input ──────────────────────────────────────────────────────────────
+
+function setupVoiceInput() {
+  if (!micButton) return;
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) return; // mic stays hidden on unsupported browsers (e.g. Firefox)
+
+  const voiceIndicator = document.querySelector("#voiceIndicator");
+  const composerCard = chatForm.querySelector(".composer-card");
+  const defaultPlaceholder = messageInput.getAttribute("placeholder") || "Reply...";
+  const SILENCE_MS = 4500;
+  let baseValue = "";
+  let silenceTimer = null;
+  let autoSubmitArmed = false;
+
+  micButton.hidden = false;
+  speechRecognition = new SpeechRecognition();
+  speechRecognition.continuous = true;
+  speechRecognition.interimResults = true;
+  speechRecognition.maxAlternatives = 3;
+  speechRecognition.lang = "en-IN";
+
+  function showListeningUi() {
+    if (voiceIndicator) voiceIndicator.hidden = false;
+    if (composerCard) composerCard.classList.add("listening");
+    micButton.classList.add("listening");
+    micButton.setAttribute("aria-label", "Stop voice input");
+    messageInput.setAttribute("placeholder", "Listening…");
+  }
+
+  function hideListeningUi() {
+    if (voiceIndicator) voiceIndicator.hidden = true;
+    if (composerCard) composerCard.classList.remove("listening");
+    micButton.classList.remove("listening");
+    micButton.setAttribute("aria-label", "Voice input");
+    messageInput.setAttribute("placeholder", defaultPlaceholder);
+  }
+
+  function bumpSilenceTimer() {
+    clearTimeout(silenceTimer);
+    silenceTimer = setTimeout(() => {
+      autoSubmitArmed = true;
+      try { speechRecognition.stop(); } catch (_) { /* already stopped */ }
+    }, SILENCE_MS);
+  }
+
+  speechRecognition.onstart = () => {
+    isListening = true;
+    baseValue = messageInput.value ? messageInput.value.trimEnd() + " " : "";
+    autoSubmitArmed = false;
+    showListeningUi();
+    bumpSilenceTimer();
+  };
+
+  speechRecognition.onresult = (event) => {
+    let transcript = "";
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      transcript += event.results[i][0].transcript;
+    }
+    messageInput.value = (baseValue + transcript).trimStart();
+    syncSendButton();
+    bumpSilenceTimer();
+  };
+
+  speechRecognition.onend = () => {
+    clearTimeout(silenceTimer);
+    isListening = false;
+    hideListeningUi();
+    if (autoSubmitArmed && messageInput.value.trim()) {
+      autoSubmitArmed = false;
+      if (typeof chatForm.requestSubmit === "function") chatForm.requestSubmit();
+      else chatForm.dispatchEvent(new Event("submit", { cancelable: true, bubbles: true }));
+    } else {
+      autoSubmitArmed = false;
+      messageInput.focus();
+    }
+  };
+
+  speechRecognition.onerror = (event) => {
+    clearTimeout(silenceTimer);
+    autoSubmitArmed = false;
+    if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+      addMessage("meta", "Microphone access is blocked. Allow it in your browser settings to use voice input.");
+    }
+    isListening = false;
+    hideListeningUi();
+  };
+
+  micButton.addEventListener("click", () => {
+    if (isListening) {
+      autoSubmitArmed = false;
+      try { speechRecognition.stop(); } catch (_) { /* ignore */ }
+      return;
+    }
+    try {
+      speechRecognition.start();
+    } catch (error) {
+      console.warn("Could not start voice input:", error);
+    }
+  });
 }
 
 newChatButton.addEventListener("click", () => resetChat("New chat started. How can I help you today?"));
