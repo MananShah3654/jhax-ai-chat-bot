@@ -67,10 +67,11 @@ function setupVoiceInput() {
   const voiceIndicator = document.querySelector("#voiceIndicator");
   const composerCard = chatForm.querySelector(".composer-card");
   const defaultPlaceholder = messageInput.getAttribute("placeholder") || "Reply...";
-  const SILENCE_MS = 4500;
+  const SILENCE_MS = 2500;
   let baseValue = "";
   let silenceTimer = null;
-  let autoSubmitArmed = false;
+  let cancelRequested = false;
+  let voiceCaptured = false;
 
   micButton.hidden = false;
   speechRecognition = new SpeechRecognition();
@@ -98,15 +99,20 @@ function setupVoiceInput() {
   function bumpSilenceTimer() {
     clearTimeout(silenceTimer);
     silenceTimer = setTimeout(() => {
-      autoSubmitArmed = true;
       try { speechRecognition.stop(); } catch (_) { /* already stopped */ }
     }, SILENCE_MS);
+  }
+
+  function submitTranscript() {
+    if (typeof chatForm.requestSubmit === "function") chatForm.requestSubmit();
+    else chatForm.dispatchEvent(new Event("submit", { cancelable: true, bubbles: true }));
   }
 
   speechRecognition.onstart = () => {
     isListening = true;
     baseValue = messageInput.value ? messageInput.value.trimEnd() + " " : "";
-    autoSubmitArmed = false;
+    cancelRequested = false;
+    voiceCaptured = false;
     showListeningUi();
     bumpSilenceTimer();
   };
@@ -116,6 +122,7 @@ function setupVoiceInput() {
     for (let i = event.resultIndex; i < event.results.length; i++) {
       transcript += event.results[i][0].transcript;
     }
+    if (transcript.trim().length > 0) voiceCaptured = true;
     messageInput.value = (baseValue + transcript).trimStart();
     syncSendButton();
     bumpSilenceTimer();
@@ -125,19 +132,17 @@ function setupVoiceInput() {
     clearTimeout(silenceTimer);
     isListening = false;
     hideListeningUi();
-    if (autoSubmitArmed && messageInput.value.trim()) {
-      autoSubmitArmed = false;
-      if (typeof chatForm.requestSubmit === "function") chatForm.requestSubmit();
-      else chatForm.dispatchEvent(new Event("submit", { cancelable: true, bubbles: true }));
-    } else {
-      autoSubmitArmed = false;
-      messageInput.focus();
-    }
+    const hasText = messageInput.value.trim().length > 0;
+    const shouldSubmit = !cancelRequested && voiceCaptured && hasText;
+    cancelRequested = false;
+    voiceCaptured = false;
+    if (shouldSubmit) submitTranscript();
+    else messageInput.focus();
   };
 
   speechRecognition.onerror = (event) => {
     clearTimeout(silenceTimer);
-    autoSubmitArmed = false;
+    cancelRequested = true; // suppress auto-submit on error
     if (event.error === "not-allowed" || event.error === "service-not-allowed") {
       addMessage("meta", "Microphone access is blocked. Allow it in your browser settings to use voice input.");
     }
@@ -147,7 +152,7 @@ function setupVoiceInput() {
 
   micButton.addEventListener("click", () => {
     if (isListening) {
-      autoSubmitArmed = false;
+      cancelRequested = true; // user clicked to cancel — do NOT auto-submit
       try { speechRecognition.stop(); } catch (_) { /* ignore */ }
       return;
     }
