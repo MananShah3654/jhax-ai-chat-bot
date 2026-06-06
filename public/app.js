@@ -252,6 +252,8 @@ function renderContextCards(context) {
   if (context.order) addOrderCard(context.order, context.intent);
   if (context.restaurants?.length) addLocationCards(context.restaurants);
   if (context.menuItems?.length) addMenuOptions(context.menuItems, context.serviceContext);
+  if (context.flights?.length) addFlightOptions(context.flights, context.flightSlots);
+  if (context.booking) addFlightBookingCard(context.booking, context.intent);
 }
 
 // ─── Restaurant Loader ────────────────────────────────────────────────────────
@@ -427,6 +429,528 @@ function locationDetail(label, value) {
   const detailValue = document.createElement("strong"); detailValue.textContent = value;
   detail.append(detailLabel, detailValue);
   return detail;
+}
+
+// ─── Flight Options ───────────────────────────────────────────────────────────
+
+function addFlightOptions(flights, slots) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "flight-options";
+
+  if (slots) {
+    const summary = document.createElement("div");
+    summary.className = "flight-summary";
+    const route = `${slots.origin} → ${slots.destination}`;
+    const date = formatFlightDate(slots.departDate);
+    const pax = `${slots.passengers || 1} ${Number(slots.passengers) === 1 ? "traveler" : "travelers"}`;
+    const cabin = (slots.cabinClass || "economy").replace("_", " ");
+    summary.innerHTML = `<strong>${route}</strong><span>${date} · ${pax} · ${cabin}</span>`;
+    wrapper.appendChild(summary);
+  }
+
+  flights.slice(0, 4).forEach((flight, index) => {
+    wrapper.appendChild(buildFlightCard(flight, index));
+  });
+
+  messages.appendChild(wrapper);
+  messages.scrollTop = messages.scrollHeight;
+}
+
+function buildFlightCard(flight, index) {
+  const card = document.createElement("article");
+  card.className = "flight-card";
+
+  const slice = flight.slices?.[0] || {};
+  const firstSeg = slice.segments?.[0] || {};
+  const lastSeg = slice.segments?.[slice.segments.length - 1] || {};
+  const stopLabel = slice.stops === 0
+    ? "Direct"
+    : `${slice.stops} stop${slice.stops > 1 ? "s" : ""}`;
+  const airlineName = flight.airline?.name || "Airline";
+  const dealsLabel = `Offer ${index + 1}`;
+
+  // Left side — airline + route
+  const main = document.createElement("div");
+  main.className = "flight-card-main";
+
+  const airline = document.createElement("div");
+  airline.className = "flight-card-airline";
+  airline.innerHTML = `<span class="flight-card-airline-name">${escapeHtml(airlineName)}</span>`;
+
+  const route = document.createElement("div");
+  route.className = "flight-card-route";
+
+  const depart = document.createElement("div");
+  depart.className = "flight-card-endpoint";
+  depart.innerHTML = `
+    <strong>${escapeHtml(formatTime(firstSeg.departing_at))}</strong>
+    <span>${escapeHtml(slice.origin || firstSeg.origin || "")}</span>
+  `;
+
+  const path = document.createElement("div");
+  path.className = "flight-card-path";
+  path.innerHTML = `
+    <span class="flight-card-duration">${escapeHtml(slice.duration_label || "")}</span>
+    <div class="flight-card-line" aria-hidden="true">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" class="flight-card-plane" aria-hidden="true">
+        <path d="M2.5 19.5l19-7.5-19-7.5 1 6.5 12 1-12 1z"/>
+      </svg>
+    </div>
+    <span class="flight-card-stops">${escapeHtml(stopLabel)}</span>
+  `;
+
+  const arrive = document.createElement("div");
+  arrive.className = "flight-card-endpoint";
+  arrive.innerHTML = `
+    <strong>${escapeHtml(formatTime(lastSeg.arriving_at))}</strong>
+    <span>${escapeHtml(slice.destination || lastSeg.destination || "")}</span>
+  `;
+  route.append(depart, path, arrive);
+  main.append(airline, route);
+
+  // Right side — price + Select button
+  const aside = document.createElement("div");
+  aside.className = "flight-card-aside";
+
+  const priceBlock = document.createElement("div");
+  priceBlock.className = "flight-card-price";
+  priceBlock.innerHTML = `
+    <span class="flight-card-deal">${escapeHtml(dealsLabel)}</span>
+    <strong>${escapeHtml(formatFlightPrice(flight.total_amount, flight.total_currency))}</strong>
+  `;
+
+  const select = document.createElement("button");
+  select.type = "button";
+  select.className = "flight-card-select";
+  select.innerHTML = `Select <span aria-hidden="true">→</span>`;
+  select.addEventListener("click", () => {
+    const wrapper = card.parentElement;
+    if (wrapper) {
+      wrapper.querySelectorAll(".flight-card").forEach((sibling) => {
+        sibling.classList.toggle("flight-card-selected", sibling === card);
+        sibling.classList.toggle("flight-card-dimmed", sibling !== card);
+        const siblingBtn = sibling.querySelector(".flight-card-select");
+        if (siblingBtn) siblingBtn.disabled = true;
+      });
+      const thisBtn = card.querySelector(".flight-card-select");
+      if (thisBtn) thisBtn.textContent = "Selected";
+    }
+    messageInput.value = `book flight ${index + 1}`;
+    if (typeof chatForm.requestSubmit === "function") chatForm.requestSubmit();
+    else chatForm.dispatchEvent(new Event("submit", { cancelable: true, bubbles: true }));
+  });
+
+  aside.append(priceBlock, select);
+  card.append(main, aside);
+  return card;
+}
+
+function addFlightBookingCard(booking, intent) {
+  const offer = booking.offer || {};
+  const slice = offer.slices?.[0] || {};
+  const firstSeg = slice.segments?.[0] || {};
+  const lastSeg = slice.segments?.[slice.segments.length - 1] || firstSeg;
+  const wallet = booking.jhapay_wallet || {};
+  const fare = booking.fare || {};
+  const passengers = booking.passengers || [];
+  const stopLabel = slice.stops === 0
+    ? "Non-stop"
+    : `${slice.stops} stop${slice.stops > 1 ? "s" : ""}`;
+  const flightCode = slice.segments?.map((s) => s.flight_number).filter(Boolean).join(" + ") || "";
+  const status = intent === "flight_booking_confirmed"
+    ? "confirmed"
+    : intent === "flight_booking_cancelled"
+      ? "cancelled"
+      : "draft";
+
+  const card = document.createElement("article");
+  card.className = "booking-card";
+
+  // Header
+  const header = document.createElement("div");
+  header.className = "booking-card-header";
+  const titleBlock = document.createElement("div");
+  const title = document.createElement("h2");
+  title.textContent = status === "confirmed"
+    ? "Confirmed flight booking"
+    : status === "cancelled"
+      ? "Cancelled draft"
+      : "Draft flight booking";
+  titleBlock.appendChild(title);
+  if (status === "confirmed" && booking.pnr) {
+    const pnr = document.createElement("strong");
+    pnr.className = "booking-pnr";
+    pnr.textContent = `PNR ${booking.pnr}`;
+    titleBlock.appendChild(pnr);
+  }
+  const route = document.createElement("p");
+  route.className = "booking-route-line";
+  route.textContent = `${slice.origin || ""} → ${slice.destination || ""} · ${formatFlightDate(firstSeg.departing_at?.slice(0, 10))}`;
+  titleBlock.appendChild(route);
+
+  const statusBadge = document.createElement("span");
+  statusBadge.className = `order-status ${status}`;
+  statusBadge.textContent = status;
+  header.append(titleBlock, statusBadge);
+
+  // Flight summary row
+  const cabinLabel = (offer.cabin_class_marketing_name || offer.cabin_class || "economy").replace("_", " ");
+  const summary = document.createElement("div");
+  summary.className = "booking-flight-summary";
+  summary.innerHTML = `
+    <div class="booking-flight-airline">
+      <strong>${escapeHtml(offer.airline?.name || "Airline")}</strong>
+      <span>${escapeHtml(flightCode)} · ${escapeHtml(stopLabel)} · ${escapeHtml(cabinLabel)}</span>
+    </div>
+    <div class="booking-flight-route">
+      <div class="booking-flight-endpoint">
+        <strong>${escapeHtml(formatTime(firstSeg.departing_at))}</strong>
+        <span>${escapeHtml(slice.origin || "")}</span>
+      </div>
+      <span class="booking-flight-duration">${escapeHtml(slice.duration_label || "")}</span>
+      <div class="booking-flight-endpoint">
+        <strong>${escapeHtml(formatTime(lastSeg.arriving_at))}</strong>
+        <span>${escapeHtml(slice.destination || "")}</span>
+      </div>
+    </div>
+  `;
+
+  // Passengers section — editable list with Add / Edit / Delete
+  const paxSection = document.createElement("div");
+  paxSection.className = "booking-section booking-passengers";
+  if (status === "draft") {
+    renderPassengerEditor(paxSection, booking);
+  } else {
+    renderPassengerReadOnly(paxSection, passengers);
+  }
+
+  // Fare breakdown section
+  const fareSection = document.createElement("div");
+  fareSection.className = "booking-section booking-fare";
+  const fareLabel = document.createElement("p");
+  fareLabel.className = "booking-section-label";
+  fareLabel.textContent = "Fare breakdown";
+  fareSection.appendChild(fareLabel);
+  const fareRows = document.createElement("div");
+  fareRows.className = "booking-fare-rows";
+  fareRows.append(
+    fareRow("Base fare", fare.base_amount, fare.currency),
+    fareRow("Taxes & fees", fare.tax_amount, fare.currency)
+  );
+  const totalRow = document.createElement("div");
+  totalRow.className = "booking-fare-row booking-fare-total";
+  totalRow.innerHTML = `<span>Total</span><strong>${escapeHtml(formatFlightPrice(fare.total_amount, fare.currency))}</strong>`;
+  fareRows.appendChild(totalRow);
+  fareSection.appendChild(fareRows);
+
+  // Conditions / what's included
+  const conditions = document.createElement("div");
+  conditions.className = "booking-conditions";
+  const baggage = offer.baggage || { carry_on: 0, checked: 0 };
+  const carry = baggage.carry_on > 0 ? `${baggage.carry_on} carry-on` : "Carry-on not included";
+  const checked = baggage.checked > 0 ? `${baggage.checked} checked bag${baggage.checked > 1 ? "s" : ""}` : "No checked bag";
+  const refund = offer.refundable === true ? "Refundable" : offer.refundable === false ? "Non-refundable" : "Refund policy varies";
+  const change = offer.changeable === true ? "Changes allowed" : offer.changeable === false ? "Changes not allowed" : "";
+  const conditionsText = [carry, checked, refund, change].filter(Boolean).join(" · ");
+  conditions.innerHTML = `<span class="booking-conditions-label">Included</span> ${escapeHtml(conditionsText)}`;
+
+  // JhaPay wallet panel
+  const walletPanel = document.createElement("div");
+  walletPanel.className = "wallet-panel";
+  const walletBrand = document.createElement("div");
+  walletBrand.className = "wallet-brand";
+  walletBrand.innerHTML = `<span>JhaPay</span><small>Wallet</small>`;
+  const walletNumbers = document.createElement("div");
+  walletNumbers.className = "wallet-numbers";
+  walletNumbers.append(
+    walletMetric("Current balance", wallet.balance_before, "wallet-balance"),
+    walletMetric("Ticket total", wallet.order_total ?? offer.total_amount, "wallet-total"),
+    walletMetric("Remaining", wallet.remaining_after, "wallet-remaining")
+  );
+  walletPanel.append(walletBrand, walletNumbers);
+
+  // Footer
+  const footer = document.createElement("div");
+  footer.className = "booking-card-footer";
+
+  if (status === "draft") {
+    const actions = document.createElement("div");
+    actions.className = "booking-actions";
+    const cancel = document.createElement("button");
+    cancel.type = "button";
+    cancel.className = "booking-cancel secondary-action";
+    cancel.textContent = "Cancel";
+    cancel.addEventListener("click", () => sendChatMessage("cancel"));
+    const confirm = document.createElement("button");
+    confirm.type = "button";
+    confirm.className = "booking-confirm";
+    confirm.textContent = "Confirm & pay";
+    const allValid = (booking.passengers || []).every(passengerIsValid);
+    confirm.disabled = !allValid;
+    confirm.title = allValid ? "" : "Fill name and date of birth for every passenger";
+    confirm.addEventListener("click", () => {
+      if (confirm.disabled) return;
+      sendChatMessage("confirm");
+    });
+    actions.append(cancel, confirm);
+    footer.appendChild(actions);
+  } else if (status === "confirmed") {
+    const eta = document.createElement("span");
+    eta.className = "pickup-eta";
+    eta.textContent = "Check-in opens 24 hours before departure. Itinerary sent to your email.";
+    footer.appendChild(eta);
+  } else if (status === "cancelled") {
+    const note = document.createElement("span");
+    note.className = "booking-cancelled-note";
+    note.textContent = "No charge made.";
+    footer.appendChild(note);
+  }
+
+  card.append(header, summary, paxSection, fareSection, conditions, walletPanel, footer);
+  messages.appendChild(card);
+  scrollIntoChatView(card);
+}
+
+function fareRow(label, amount, currency) {
+  const row = document.createElement("div");
+  row.className = "booking-fare-row";
+  const span = document.createElement("span");
+  span.textContent = label;
+  const value = document.createElement("strong");
+  value.textContent = formatFlightPrice(amount, currency);
+  row.append(span, value);
+  return row;
+}
+
+function passengerIsValid(p) {
+  return Boolean(
+    p
+    && String(p.first_name || "").trim()
+    && String(p.last_name || "").trim()
+    && /^\d{4}-\d{2}-\d{2}$/.test(String(p.date_of_birth || "").trim())
+  );
+}
+
+function renderPassengerReadOnly(section, passengers) {
+  section.textContent = "";
+  const heading = document.createElement("p");
+  heading.className = "booking-section-label";
+  heading.textContent = passengers.length > 1 ? `Passengers (${passengers.length})` : "Passenger";
+  section.appendChild(heading);
+  passengers.forEach((p) => {
+    const row = document.createElement("div");
+    row.className = "booking-passenger-row";
+    const fullName = [p.first_name, p.last_name].filter(Boolean).join(" ") || "Guest";
+    const contact = p.email || p.phone || "";
+    const dob = p.date_of_birth ? `DOB ${p.date_of_birth}` : "";
+    row.innerHTML = `
+      <div class="booking-passenger-main">
+        <strong>${escapeHtml(fullName)}</strong>
+        <span>${escapeHtml(dob)}${dob && contact ? " · " : ""}${escapeHtml(contact)}</span>
+      </div>
+    `;
+    section.appendChild(row);
+  });
+}
+
+function renderPassengerEditor(section, booking) {
+  section.textContent = "";
+  const passengers = booking.passengers || [];
+  const heading = document.createElement("p");
+  heading.className = "booking-section-label";
+  heading.textContent = passengers.length > 1 ? `Passengers (${passengers.length})` : "Passenger";
+  section.appendChild(heading);
+
+  passengers.forEach((p, idx) => {
+    const row = document.createElement("div");
+    row.className = "booking-passenger-row";
+    row.dataset.passengerIndex = String(idx);
+    const valid = passengerIsValid(p);
+    row.classList.toggle("invalid", !valid);
+
+    if (row.dataset.editing === "true") {
+      // (editor mode handled by toggle below)
+    }
+
+    const fullName = [p.first_name, p.last_name].filter(Boolean).join(" ") || `Passenger ${idx + 1}`;
+    const contact = p.email || p.phone || "";
+    const dob = p.date_of_birth ? `DOB ${p.date_of_birth}` : "";
+    const status = valid ? "" : "<span class=\"booking-passenger-warn\">Needs details</span>";
+
+    const main = document.createElement("div");
+    main.className = "booking-passenger-main";
+    main.innerHTML = `
+      <strong>${escapeHtml(fullName)}</strong>
+      <span>${escapeHtml(dob)}${dob && contact ? " · " : ""}${escapeHtml(contact)}</span>
+      ${status}
+    `;
+
+    const actions = document.createElement("div");
+    actions.className = "booking-passenger-actions";
+
+    const editBtn = document.createElement("button");
+    editBtn.type = "button";
+    editBtn.className = "booking-passenger-edit";
+    editBtn.textContent = valid ? "Edit" : "Fill in";
+    editBtn.addEventListener("click", () => openPassengerForm(section, booking, idx));
+
+    if (idx > 0) {
+      const delBtn = document.createElement("button");
+      delBtn.type = "button";
+      delBtn.className = "booking-passenger-delete";
+      delBtn.setAttribute("aria-label", `Remove passenger ${idx + 1}`);
+      delBtn.textContent = "Remove";
+      delBtn.addEventListener("click", async () => {
+        const next = booking.passengers.filter((_, i) => i !== idx);
+        await savePassengers(section, booking, next);
+      });
+      actions.append(editBtn, delBtn);
+    } else {
+      actions.append(editBtn);
+    }
+
+    row.append(main, actions);
+    section.appendChild(row);
+  });
+
+  const add = document.createElement("button");
+  add.type = "button";
+  add.className = "booking-passenger-add";
+  add.textContent = "+ Add passenger";
+  add.disabled = passengers.length >= 9;
+  add.addEventListener("click", () => {
+    const next = [...booking.passengers, { first_name: "", last_name: "", date_of_birth: "", email: "", phone: "", gender: "" }];
+    savePassengers(section, booking, next).then(() => openPassengerForm(section, booking, next.length - 1));
+  });
+  section.appendChild(add);
+}
+
+function openPassengerForm(section, booking, idx) {
+  const p = booking.passengers[idx] || {};
+  const overlay = document.createElement("div");
+  overlay.className = "booking-passenger-overlay";
+
+  const form = document.createElement("form");
+  form.className = "booking-passenger-form";
+  form.innerHTML = `
+    <h3>Passenger ${idx + 1}</h3>
+    <label>First name<input type="text" name="first_name" value="${escapeHtml(p.first_name || "")}" required></label>
+    <label>Last name<input type="text" name="last_name" value="${escapeHtml(p.last_name || "")}" required></label>
+    <label>Date of birth<input type="date" name="date_of_birth" value="${escapeHtml(p.date_of_birth || "")}" required></label>
+    <label>Email<input type="email" name="email" value="${escapeHtml(p.email || "")}"></label>
+    <label>Phone<input type="tel" name="phone" value="${escapeHtml(p.phone || "")}"></label>
+    <div class="booking-passenger-form-actions">
+      <button type="button" class="booking-passenger-form-cancel">Cancel</button>
+      <button type="submit" class="booking-passenger-form-save">Save</button>
+    </div>
+  `;
+
+  overlay.appendChild(form);
+  document.body.appendChild(overlay);
+
+  form.querySelector(".booking-passenger-form-cancel").addEventListener("click", () => overlay.remove());
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.remove(); });
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const data = Object.fromEntries(new FormData(form).entries());
+    const next = booking.passengers.map((existing, i) => i === idx ? { ...existing, ...data } : existing);
+    overlay.remove();
+    await savePassengers(section, booking, next);
+  });
+}
+
+async function savePassengers(section, booking, nextPassengers) {
+  try {
+    ensureSessionId();
+    const res = await fetch("/api/booking/passengers", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId, passengers: nextPassengers })
+    });
+    if (!res.ok) {
+      const payload = await res.json().catch(() => ({}));
+      addMessage("meta", payload.error || "Could not update passengers.");
+      return;
+    }
+    const payload = await res.json();
+    booking.passengers = payload.booking.passengers;
+    booking.fare = payload.booking.fare;
+    booking.jhapay_wallet = payload.booking.jhapay_wallet;
+    refreshBookingCard(section, booking);
+  } catch (error) {
+    addMessage("meta", `Network error: ${error.message}`);
+  }
+}
+
+function refreshBookingCard(paxSection, booking) {
+  // Re-render the passengers panel
+  renderPassengerEditor(paxSection, booking);
+  // Re-render fare + wallet (find them in the parent card)
+  const card = paxSection.closest(".booking-card");
+  if (!card) return;
+  const fareSection = card.querySelector(".booking-fare");
+  if (fareSection) {
+    const rows = fareSection.querySelector(".booking-fare-rows");
+    if (rows) {
+      rows.textContent = "";
+      rows.append(
+        fareRow("Base fare", booking.fare.base_amount, booking.fare.currency),
+        fareRow("Taxes & fees", booking.fare.tax_amount, booking.fare.currency)
+      );
+      const total = document.createElement("div");
+      total.className = "booking-fare-row booking-fare-total";
+      total.innerHTML = `<span>Total (${booking.passengers.length} pax)</span><strong>${escapeHtml(formatFlightPrice(booking.fare.total_amount, booking.fare.currency))}</strong>`;
+      rows.appendChild(total);
+    }
+  }
+  const wallet = card.querySelector(".wallet-numbers");
+  if (wallet) {
+    wallet.textContent = "";
+    const w = booking.jhapay_wallet;
+    wallet.append(
+      walletMetric("Current balance", w.balance_before, "wallet-balance"),
+      walletMetric("Ticket total", w.order_total, "wallet-total"),
+      walletMetric("Remaining", w.remaining_after, "wallet-remaining")
+    );
+  }
+  // Enable/disable Confirm button
+  const confirmBtn = card.querySelector(".booking-confirm");
+  if (confirmBtn) {
+    const allValid = booking.passengers.every(passengerIsValid);
+    confirmBtn.disabled = !allValid;
+    confirmBtn.title = allValid ? "" : "Fill name and date of birth for every passenger";
+  }
+}
+
+function formatTime(iso) {
+  if (!iso) return "—";
+  // Duffel returns local naive times like "2026-06-24T17:48:00" — extract the HH:MM
+  const m = String(iso).match(/T(\d{2}):(\d{2})/);
+  if (!m) return "—";
+  let h = Number(m[1]);
+  const mm = m[2];
+  const ampm = h >= 12 ? "PM" : "AM";
+  h = h % 12 || 12;
+  return `${h}:${mm} ${ampm}`;
+}
+
+function formatFlightDate(iso) {
+  if (!iso) return "";
+  const [y, m, d] = String(iso).split("-").map(Number);
+  if (!y || !m || !d) return iso;
+  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  return `${months[m - 1]} ${d}, ${y}`;
+}
+
+function formatFlightPrice(amount, currency) {
+  if (amount === undefined || amount === null || amount === "") return "—";
+  const n = Number(amount);
+  const value = Number.isFinite(n) ? n.toFixed(2) : String(amount);
+  const ccy = String(currency || "USD").toUpperCase();
+  const SYMBOLS = { USD: "$", EUR: "€", GBP: "£", INR: "₹", CAD: "CA$", AUD: "A$", JPY: "¥" };
+  const symbol = SYMBOLS[ccy];
+  return symbol ? `${symbol}${value}` : `${ccy} ${value}`;
 }
 
 // ─── Cart ─────────────────────────────────────────────────────────────────────

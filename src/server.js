@@ -5,6 +5,7 @@ const path = require("node:path");
 const { createStore } = require("./db");
 const { createMcpEngine } = require("./mcpEngine");
 const { createRagEngine } = require("./rag");
+const { extractFlightSlots } = require("./travelParse");
 const {
   answerWithBrain,
   cancelsOrder,
@@ -39,6 +40,7 @@ const {
   wantsDealsNearby,
   wantsDelivery,
   wantsDiscovery,
+  wantsFlightSearch,
   wantsFreeItems,
   wantsFriendMeal,
   wantsGroupPlan,
@@ -144,6 +146,37 @@ function makeRequestHandler({ store, mcp, rag, serveStaticFiles }) {
         return sendJson(res, 200, await handleChat({ body, mcp, rag }));
       }
 
+      if (req.method === "POST" && url.pathname === "/api/booking/passengers") {
+        const body = await readJson(req);
+        const sessionId = body.sessionId || "";
+        const session = sessions.get(sessionId);
+        if (!session || !session.pendingFlightBooking) {
+          return sendJson(res, 404, { error: "No pending flight booking in this session." });
+        }
+        const incoming = Array.isArray(body.passengers) ? body.passengers : null;
+        if (!incoming || incoming.length === 0) {
+          return sendJson(res, 400, { error: "passengers array required." });
+        }
+        const cleaned = incoming.slice(0, 9).map((p) => ({
+          first_name: String(p.first_name || "").trim(),
+          last_name: String(p.last_name || "").trim(),
+          date_of_birth: String(p.date_of_birth || "").trim(),
+          email: String(p.email || "").trim(),
+          phone: String(p.phone || "").trim(),
+          gender: String(p.gender || "").trim()
+        }));
+        const offer = session.pendingFlightBooking.offer;
+        const idx = (session.pendingFlightBooking.selected_index || 1) - 1;
+        session.pendingFlightBooking = buildBookingFromOffer({
+          offer,
+          idx,
+          passengers: cleaned,
+          session
+        });
+        sessions.set(sessionId, session);
+        return sendJson(res, 200, { booking: session.pendingFlightBooking });
+      }
+
       if (req.method === "POST" && url.pathname === "/api/orders/draft") {
         const body = await readJson(req);
         const sessionId = body.sessionId || "api";
@@ -247,6 +280,47 @@ async function buildDiscoveryContext(message, mcp, sessionId, restaurantId) {
   return { items, restaurants, discoveryMeta: { priceCeiling, dietaryFilters, lateNight, openNow, kidsFriendly, outdoorSeating, halalOnly, coffeeShop, wantsRestaurantList, isTrending: trending } };
 }
 
+// ─── Flight Booking Helpers ───────────────────────────────────────────────────
+
+function buildBookingFromOffer({ offer, idx, passengers, session }) {
+  const paxCount = Math.max(1, passengers.length);
+  const offerPaxCount = Math.max(1, session.lastFlightSlots?.passengers || 1);
+  const offerTotal = Number(offer.total_amount) || 0;
+  const perPax = offerTotal / offerPaxCount;
+  const ticketPrice = Math.round(perPax * paxCount * 100) / 100;
+  const baseAmount = (Number(offer.base_amount) || offerTotal) / offerPaxCount * paxCount;
+  const taxAmount = Math.max(0, ticketPrice - baseAmount);
+  const balanceBefore = session.profile?.wallet_balance ?? 5000.00;
+  return {
+    offer,
+    selected_index: idx + 1,
+    passengers,
+    fare: {
+      base_amount: Math.round(baseAmount * 100) / 100,
+      tax_amount: Math.round(taxAmount * 100) / 100,
+      total_amount: ticketPrice,
+      currency: offer.total_currency || "USD",
+      per_passenger: Math.round(perPax * 100) / 100,
+      passenger_count: paxCount
+    },
+    jhapay_wallet: {
+      balance_before: balanceBefore,
+      order_total: ticketPrice,
+      remaining_after: Math.max(0, balanceBefore - ticketPrice),
+      currency: offer.total_currency || "USD"
+    }
+  };
+}
+
+function passengerIsValid(p) {
+  return Boolean(
+    p
+    && String(p.first_name || "").trim()
+    && String(p.last_name || "").trim()
+    && /^\d{4}-\d{2}-\d{2}$/.test(String(p.date_of_birth || "").trim())
+  );
+}
+
 // ─── Chat Handler ─────────────────────────────────────────────────────────────
 
 async function handleChat({ body, mcp, rag }) {
@@ -275,7 +349,35 @@ async function handleChat({ body, mcp, rag }) {
   // 2. Vendor payment (always blocked)
   if (wantsVendorPay(message)) return reply({ intent: "vendor_blocked" });
 
-  // 3. Confirm / cancel pending order
+  // 3. Confirm / cancel pending FLIGHT booking (must run before food order)
+  if (session.pendingFlightBooking && confirmsOrder(message)) {
+    const allValid = session.pendingFlightBooking.passengers.every(passengerIsValid);
+    if (!allValid) {
+      return reply({
+        intent: "flight_draft",
+        booking: session.pendingFlightBooking,
+        validationError: "Please fill name and date of birth for every passenger before confirming."
+      });
+    }
+    const booking = {
+      ...session.pendingFlightBooking,
+      pnr: `JHA${Math.random().toString(36).slice(2, 7).toUpperCase()}`,
+      status: "confirmed",
+      confirmed_at: new Date().toISOString()
+    };
+    session.pendingFlightBooking = null;
+    session.lastFlightBooking = booking;
+    sessions.set(sessionId, session);
+    return reply({ intent: "flight_booking_confirmed", booking });
+  }
+  if (session.pendingFlightBooking && cancelsOrder(message)) {
+    const cancelled = { ...session.pendingFlightBooking, status: "cancelled" };
+    session.pendingFlightBooking = null;
+    sessions.set(sessionId, session);
+    return reply({ intent: "flight_booking_cancelled", booking: cancelled });
+  }
+
+  // 3. Confirm / cancel pending FOOD order
   if (session.pendingOrder && confirmsOrder(message)) {
     const order = await mcp.execute("confirm_order", { order_id: session.pendingOrder.id }, sessionId);
     session.pendingOrder = null; sessions.set(sessionId, session);
@@ -285,6 +387,65 @@ async function handleChat({ body, mcp, rag }) {
     const order = await mcp.execute("cancel_order", { order_id: session.pendingOrder.id }, sessionId);
     session.pendingOrder = null; sessions.set(sessionId, session);
     return reply({ intent: "order_cancelled", order });
+  }
+
+  // 3a. "book flight N" — user picked one from the cards we already showed
+  const bookFlightMatch = message.match(/\bbook\s+flight\s+(\d{1,2})\b/i);
+  if (bookFlightMatch && session.lastFlightOffers?.length) {
+    const idx = Number(bookFlightMatch[1]) - 1;
+    const offer = session.lastFlightOffers[idx];
+    if (offer) {
+      const paxCount = Math.max(1, session.lastFlightSlots?.passengers || 1);
+      const presetPassenger = session.profile?.passenger || {
+        first_name: "Manan",
+        last_name: "Shah",
+        date_of_birth: "1995-08-15",
+        email: "manan@jhapay.com",
+        phone: "+91 98765 43210",
+        gender: "male"
+      };
+      const passengers = [presetPassenger];
+      for (let i = 1; i < paxCount; i += 1) {
+        passengers.push({ first_name: "", last_name: "", date_of_birth: "", email: "", phone: "", gender: "" });
+      }
+      session.pendingFlightBooking = buildBookingFromOffer({ offer, idx, passengers, session });
+      sessions.set(sessionId, session);
+      return reply({ intent: "flight_draft", booking: session.pendingFlightBooking });
+    }
+  }
+
+  // 3b. Flight search (Travel pillar)
+  if (wantsFlightSearch(message)) {
+    const slots = extractFlightSlots(message);
+    if (slots.missing.length > 0) {
+      return reply({
+        intent: "flight_needs_slots",
+        flightSlots: slots,
+        missingSlots: slots.missing
+      });
+    }
+    const flightResult = await mcp.execute("search_flights", {
+      origin: slots.origin,
+      destination: slots.destination,
+      depart_date: slots.departDate,
+      passengers: slots.passengers,
+      cabin_class: slots.cabinClass
+    }, sessionId);
+    if (flightResult.error) {
+      return reply({
+        intent: "flight_search_error",
+        flightSlots: slots,
+        flightError: flightResult.error
+      });
+    }
+    session.lastFlightOffers = flightResult.offers;
+    session.lastFlightSlots = slots;
+    sessions.set(sessionId, session);
+    return reply({
+      intent: "flight_search_results",
+      flightSlots: slots,
+      flights: flightResult.offers.slice(0, 4)
+    });
   }
 
   // 4. Combo upgrade (must check before generic add)

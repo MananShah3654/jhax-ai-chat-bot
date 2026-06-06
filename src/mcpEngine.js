@@ -1,3 +1,5 @@
+const duffel = require("./duffel");
+
 const toolDefinitions = [
   {
     name: "list_restaurants",
@@ -234,6 +236,22 @@ const toolDefinitions = [
         limit: { type: "number" }
       }
     }
+  },
+  {
+    name: "search_flights",
+    description: "Search real US flights via Duffel for an origin, destination, and date. Returns up to a few offers with airline, times, duration, stops, and total price. Origin and destination must be 3-letter IATA airport codes (JFK, LAX, ORD, etc.).",
+    input_schema: {
+      type: "object",
+      properties: {
+        origin: { type: "string", description: "3-letter IATA airport code, e.g. JFK" },
+        destination: { type: "string", description: "3-letter IATA airport code, e.g. LAX" },
+        depart_date: { type: "string", description: "Departure date in YYYY-MM-DD format" },
+        return_date: { type: "string", description: "Return date in YYYY-MM-DD format. Omit for one-way." },
+        passengers: { type: "number", description: "Number of adult passengers (1-9). Defaults to 1." },
+        cabin_class: { type: "string", enum: ["economy", "premium_economy", "business", "first"], description: "Cabin class. Defaults to economy." }
+      },
+      required: ["origin", "destination", "depart_date"]
+    }
   }
 ];
 
@@ -273,7 +291,15 @@ function createMcpEngine(store) {
     pay_invoice: async (input, sessionId) => store.payInvoice({ amount: input.amount, merchant: input.merchant }, sessionId),
     tip_and_close: async (input, sessionId) => store.tipAndClose({ amount: input.amount, tipPercent: input.tip_percent }, sessionId),
     get_receipts: async (input, sessionId) => store.getReceipts({ limit: input.limit }, sessionId),
-    get_personalized_recommendations: async (input, sessionId) => store.getPersonalizedRecommendations({ restaurantId: input.restaurant_id, limit: input.limit }, sessionId)
+    get_personalized_recommendations: async (input, sessionId) => store.getPersonalizedRecommendations({ restaurantId: input.restaurant_id, limit: input.limit }, sessionId),
+    search_flights: async (input) => duffel.searchFlights({
+      origin: input.origin,
+      destination: input.destination,
+      departDate: input.depart_date,
+      returnDate: input.return_date,
+      passengers: input.passengers || 1,
+      cabinClass: input.cabin_class || "economy"
+    })
   };
 
   return {

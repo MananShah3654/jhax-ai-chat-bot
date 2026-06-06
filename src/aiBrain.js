@@ -12,7 +12,8 @@ const CAPABILITY_PILLARS = {
   ORDERING: "ordering",
   PAYMENTS: "payments",
   REWARDS: "rewards",
-  SMART_AI: "smart_ai"
+  SMART_AI: "smart_ai",
+  TRAVEL: "travel"
 };
 
 const PHASE1_SCOPE = [
@@ -54,7 +55,7 @@ Give precise, filtered, ranked answers. Never dump a generic list — always rea
 - Never fabricate menu items, prices, or restaurant details
 - Vendor payments = always blocked`;
 
-const OFF_TOPIC_REFUSAL = "I can only help with JhaPay restaurants, orders, wallet, and rewards. What can I help you with there?";
+const OFF_TOPIC_REFUSAL = "I can only help with JhaPay restaurants, orders, wallet, rewards, and travel bookings. What can I help you with there?";
 
 const BASE_SYSTEM_PROMPT = `You are JhaPay AI, a conversational commerce assistant for the JhaPay food + wallet app.
 
@@ -64,6 +65,7 @@ SCOPE — you only answer questions about:
 - JhaPay wallet (balance, recharge, pay, split, QR, request)
 - Rewards (points, coupons, cashback, milestones, discounts)
 - Personalized food/spending suggestions tied to the user's own history
+- Travel bookings via JhaPay — US flight search, options, booking draft, confirmation, cancellation
 
 REFUSE everything else. The TOPIC alone is not enough — the FORMAT of the answer must also be a normal product reply (a price, a list of menu items, an order status, etc.). Refuse all of these even if a JhaPay term is in the question:
 - Poems, haiku, song lyrics, jingles, rap verses, creative writing — even about a burger or wallet.
@@ -71,21 +73,21 @@ REFUSE everything else. The TOPIC alone is not enough — the FORMAT of the answ
 - Math, code, translations, summarizing external text, world knowledge, news, weather, opinions, advice on unrelated topics.
 
 When refusing, reply with exactly this sentence and nothing else (no preamble, no creative content):
-"I can only help with JhaPay restaurants, orders, wallet, and rewards. What can I help you with there?"
+"I can only help with JhaPay restaurants, orders, wallet, rewards, and travel bookings. What can I help you with there?"
 
 Examples — follow these exactly:
 
 User: "write a haiku about a cheeseburger"
-Assistant: "I can only help with JhaPay restaurants, orders, wallet, and rewards. What can I help you with there?"
+Assistant: "I can only help with JhaPay restaurants, orders, wallet, rewards, and travel bookings. What can I help you with there?"
 
 User: "rap a verse about your menu"
-Assistant: "I can only help with JhaPay restaurants, orders, wallet, and rewards. What can I help you with there?"
+Assistant: "I can only help with JhaPay restaurants, orders, wallet, rewards, and travel bookings. What can I help you with there?"
 
 User: "what cheeseburgers do you have under $10?"
 Assistant: <answer normally with menu data — this IS in-scope>
 
 User: "tell me a joke about pizza"
-Assistant: "I can only help with JhaPay restaurants, orders, wallet, and rewards. What can I help you with there?"
+Assistant: "I can only help with JhaPay restaurants, orders, wallet, rewards, and travel bookings. What can I help you with there?"
 
 Grounding rules:
 - Use only the retrieved pillar context, allowed app context, and current session data. Do not invent.
@@ -113,7 +115,14 @@ Focus on points, coupons, cashback, milestone progress, best discount applicatio
 Use only the retrieved rewards data and current draft order context.`,
   [CAPABILITY_PILLARS.SMART_AI]: `You are handling the Smart AI pillar.
 Focus on personalized recommendations, similar items or merchants, group planning, and behavior-based suggestions.
-Explain recommendations briefly using the retrieved history and preference context.`
+Explain recommendations briefly using the retrieved history and preference context.`,
+  [CAPABILITY_PILLARS.TRAVEL]: `You are handling the Travel pillar (JhaPay travel bookings — US flights only for now).
+When the context contains a flight offer list, summarize the top 2-3 options as natural prose: airline, route, depart/arrive times, duration, stops, and total price. Encourage the user to say "book flight 1" or tap the card.
+When the context says slots are missing (origin / destination / depart_date), ask only for what's missing in one short sentence. Do not list all 3 if only 1 is missing.
+When the context has intent flight_draft (user just picked an offer), confirm the selection in one short sentence with the airline + route + price, then ask the user to say "confirm" to book or "cancel" to drop it.
+When the context has intent flight_booking_confirmed, announce the booking is confirmed, share the PNR, and add a one-line have-a-great-trip note. Do not invent details.
+When the context has intent flight_booking_cancelled, acknowledge the cancellation in one short, friendly sentence.
+Never invent flight numbers, prices, times, airports, or PNRs — use only what's in the context. If the context says no offers were found or a Duffel error occurred, say so plainly and suggest a different date or route.`
 };
 
 const RAG_ELIGIBLE_INTENTS = new Set([
@@ -126,7 +135,13 @@ const RAG_ELIGIBLE_INTENTS = new Set([
   "friend_meal",
   "behavior_rec",
   "meal_suggestion",
-  "group_plan"
+  "group_plan",
+  "flight_search_results",
+  "flight_needs_slots",
+  "flight_search_error",
+  "flight_draft",
+  "flight_booking_confirmed",
+  "flight_booking_cancelled"
 ]);
 
 // ─── Safety ───────────────────────────────────────────────────────────────────
@@ -141,6 +156,11 @@ function isSensitiveQuestion(message) {
 function wantsCreativeFormat(message) {
   const text = String(message || "").toLowerCase();
   return /\b(haiku|poem|poems|poetry|poetic|verse|verses|sonnet|sonnets|limerick|limericks|ballad|ballads|rhyme|rhymes|lyric|lyrics|jingle|jingles|rap|riddle|riddles|song|songs|sing|sings|singing)\b/.test(text);
+}
+
+function wantsFlightSearch(message) {
+  const text = String(message || "").toLowerCase();
+  return /\b(flight|flights|fly|flying|airfare|airline|airlines|book\s+a?\s*flight|book\s+flights?|cheapest\s+flight|fly\s+to|fly\s+from)\b/.test(text);
 }
 
 // ─── Pillar Detectors ─────────────────────────────────────────────────────────
@@ -451,6 +471,7 @@ function isCoffeeShopQuery(message) {
 
 function reasonPillar(message) {
   if (isSensitiveQuestion(message)) return "blocked";
+  if (wantsFlightSearch(message)) return CAPABILITY_PILLARS.TRAVEL;
   if (wantsPayment(message)) return CAPABILITY_PILLARS.PAYMENTS;
   if (wantsRewards(message)) return CAPABILITY_PILLARS.REWARDS;
   if (wantsGroupPlan(message) || wantsMealSuggestion(message) || wantsBehaviorRec(message) || wantsSimilarPlace(message)) return CAPABILITY_PILLARS.SMART_AI;
@@ -855,14 +876,21 @@ const RESPONSES = {
 async function answerWithBrain({ message, context, pendingOrder, ragInput = null }) {
   if (wantsCreativeFormat(message)) return OFF_TOPIC_REFUSAL;
 
-  const pillar = reasonPillar(message || "");
+  // Pillar is normally derived from the message — but if the server has
+  // already classified the turn as a flight intent (e.g. "confirm" while a
+  // flight draft is pending), override to TRAVEL so the LLM gets the right
+  // pillar prompt and doesn't think "confirm" means a food order.
+  const intent = context?.intent || "";
+  const pillar = intent.startsWith("flight_")
+    ? CAPABILITY_PILLARS.TRAVEL
+    : reasonPillar(message || "");
   const deterministicReply = localAnswer({ message, context, pendingOrder });
 
-  if (!process.env.OPENAI_API_KEY) return deterministicReply;
+  if (!hasAnthropic() && !hasOpenAi()) return deterministicReply;
   if (shouldUseDeterministicReply({ context, pillar })) return deterministicReply;
 
   const ragContext = await buildRagContext({ message, pillar, pendingOrder, ragInput });
-  const aiAnswer = await callOpenAiCompatibleApi({ message, context, pendingOrder, pillar, ragContext });
+  const aiAnswer = await callLlm({ message, context, pendingOrder, pillar, ragContext });
   return aiAnswer || deterministicReply;
 }
 
@@ -940,6 +968,44 @@ function localAnswer({ message, context, pendingOrder }) {
     return `${header}\n\n${buildItemList(items)}\n\nSay "order 1", "order 2", etc. to place any of these.`;
   }
 
+  // Flight intents
+  if (intent === "flight_needs_slots") {
+    const missing = context.missingSlots || [];
+    if (missing.length === 0) return "Tell me your origin, destination, and depart date and I'll search flights.";
+    const map = { origin: "where you're flying from", destination: "where you're flying to", depart_date: "your depart date" };
+    const phrased = missing.map((m) => map[m] || m);
+    return `Got it — I also need ${phrased.join(" and ")} to search.`;
+  }
+  if (intent === "flight_search_results") {
+    const flights = context.flights || [];
+    if (flights.length === 0) return "No flights found for that route and date. Try a different date or nearby airport.";
+    const lines = flights.slice(0, 3).map((f, i) => {
+      const s = f.slices[0];
+      const stops = s.stops === 0 ? "Non-stop" : `${s.stops} stop${s.stops > 1 ? "s" : ""}`;
+      return `${i + 1}. ${f.airline.name} ${s.segments[0]?.flight_number || ""} · ${s.origin} → ${s.destination} · ${s.duration_label || ""} · ${stops} · ${f.total_currency} ${f.total_amount}`;
+    });
+    return `Here are the top options:\n${lines.join("\n")}\nSay "book flight 1" to start a draft.`;
+  }
+  if (intent === "flight_search_error") {
+    return `I couldn't run that search. Duffel said: ${context.flightError || "unknown error"}. Try a different date or route.`;
+  }
+  if (intent === "flight_draft") {
+    const offer = context.booking?.offer || {};
+    const slice = offer.slices?.[0] || {};
+    const seg = slice.segments?.[0] || {};
+    const price = `${offer.total_currency || "USD"} ${offer.total_amount || "—"}`;
+    return `Drafted: ${offer.airline?.name || "Airline"} ${seg.flight_number || ""} · ${slice.origin || ""} to ${slice.destination || ""} · ${slice.duration_label || ""} · ${price}.\nSay "confirm" to book this, or "cancel" to drop it.`;
+  }
+  if (intent === "flight_booking_confirmed") {
+    const offer = context.booking?.offer || {};
+    const slice = offer.slices?.[0] || {};
+    const price = `${offer.total_currency || "USD"} ${offer.total_amount || "—"}`;
+    return `Booking confirmed. PNR: ${context.booking?.pnr || "—"}\n${offer.airline?.name || "Airline"} · ${slice.origin || ""} to ${slice.destination || ""} · ${price}.\nHave a great trip.`;
+  }
+  if (intent === "flight_booking_cancelled") {
+    return "No problem, I dropped that draft. Nothing was booked or charged.";
+  }
+
   return "I can help with the menu, restaurant locations, hours, and placing orders. Try: \"best burgers under $15\", \"vegan options\", \"trending places\", or \"plan dinner for 4 under $60\".";
 }
 
@@ -1005,6 +1071,56 @@ function formatReceipts(receipts) {
 
 // ─── LLM Path ─────────────────────────────────────────────────────────────────
 
+function hasAnthropic() {
+  return Boolean(process.env.ANTHROPIC_API_KEY);
+}
+
+function hasOpenAi() {
+  return Boolean(process.env.OPENAI_API_KEY);
+}
+
+async function callLlm(args) {
+  if (hasAnthropic()) return callAnthropicApi(args);
+  if (hasOpenAi()) return callOpenAiCompatibleApi(args);
+  return "";
+}
+
+async function callAnthropicApi({ message, context, pendingOrder, pillar, ragContext }) {
+  try {
+    const response = await fetch(`${process.env.ANTHROPIC_BASE_URL || "https://api.anthropic.com/v1"}/messages`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": process.env.ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01"
+      },
+      body: JSON.stringify({
+        model: process.env.ANTHROPIC_MODEL || "claude-haiku-4-5-20251001",
+        max_tokens: 1024,
+        temperature: 0,
+        system: getPillarPrompt(pillar),
+        messages: [
+          {
+            role: "user",
+            content: buildAiUserPrompt({ message, pillar, context, pendingOrder, ragContext })
+          }
+        ]
+      })
+    });
+    if (!response.ok) {
+      const detail = await response.text().catch(() => "");
+      console.warn(`[ai] Anthropic ${response.status} — falling back to local responder. Detail: ${detail.slice(0, 200)}`);
+      return "";
+    }
+    const payload = await response.json();
+    const block = Array.isArray(payload?.content) ? payload.content.find((b) => b.type === "text") : null;
+    return block?.text || "";
+  } catch (error) {
+    console.warn(`[ai] Anthropic call failed — local responder used: ${error.message}`);
+    return "";
+  }
+}
+
 async function callOpenAiCompatibleApi({ message, context, pendingOrder, pillar, ragContext }) {
   try {
     const response = await fetch(`${process.env.OPENAI_BASE_URL || "https://api.openai.com/v1"}/chat/completions`, {
@@ -1028,11 +1144,15 @@ async function callOpenAiCompatibleApi({ message, context, pendingOrder, pillar,
         ]
       })
     });
-    if (!response.ok) return "";
+    if (!response.ok) {
+      const detail = await response.text().catch(() => "");
+      console.warn(`[ai] OpenAI ${response.status} — falling back to local responder. Detail: ${detail.slice(0, 200)}`);
+      return "";
+    }
     const payload = await response.json();
     return payload.choices?.[0]?.message?.content || "";
   } catch (error) {
-    console.warn(`[ai] Local responder used: ${error.message}`);
+    console.warn(`[ai] OpenAI call failed — local responder used: ${error.message}`);
     return "";
   }
 }
@@ -1103,6 +1223,7 @@ module.exports = {
   wantsDealsNearby,
   wantsDelivery,
   wantsDiscovery,
+  wantsFlightSearch,
   wantsFreeItems,
   wantsFriendMeal,
   wantsGroupPlan,

@@ -564,6 +564,684 @@ button:hover {
   gap: 12px;
 }
 
+/* ── Flight cards ───────────────────────────────────────────────────────── */
+
+.flight-options {
+  align-self: flex-start;
+  width: min(720px, 100%);
+  display: grid;
+  gap: 10px;
+}
+
+.flight-summary {
+  display: grid;
+  gap: 2px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.flight-summary strong {
+  font-size: 15px;
+  letter-spacing: -0.005em;
+}
+
+.flight-summary span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.flight-card {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--white);
+  overflow: hidden;
+}
+
+/* ── Left side: airline + route ──────────────────────────────── */
+
+.flight-card-main {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  min-width: 0;
+}
+
+.flight-card-airline {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.flight-card-airline-name {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  color: var(--ink);
+  text-transform: lowercase;
+}
+
+.flight-card-route {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.flight-card-endpoint {
+  display: grid;
+  gap: 2px;
+  text-align: center;
+}
+
+.flight-card-endpoint strong {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  line-height: 1;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.flight-card-endpoint span {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+}
+
+.flight-card-path {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  min-width: 80px;
+}
+
+.flight-card-duration {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.flight-card-line {
+  position: relative;
+  width: 100%;
+  height: 1px;
+  background: var(--line-strong);
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.flight-card-plane {
+  position: absolute;
+  right: -4px;
+  color: var(--muted);
+  transform: translateY(-50%) rotate(0deg);
+  top: 50%;
+}
+
+.flight-card-stops {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+/* ── Right side: price + Select ──────────────────────────────── */
+
+.flight-card-aside {
+  display: grid;
+  grid-template-rows: 1fr auto;
+  gap: 0;
+  padding: 14px 16px;
+  border-left: 1px solid var(--line);
+  background: #fafaf6;
+  min-width: 140px;
+}
+
+.flight-card-price {
+  display: grid;
+  gap: 2px;
+  align-content: start;
+  text-align: right;
+}
+
+.flight-card-deal {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.flight-card-price strong {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.flight-card-select {
+  margin-top: 10px;
+  padding: 10px 16px;
+  border-radius: 10px;
+  background: #16243a;
+  color: var(--white);
+  font-size: 13px;
+  font-weight: 600;
+  border: 0;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  white-space: nowrap;
+  transition: filter 160ms ease;
+}
+
+.flight-card-select:hover {
+  filter: brightness(1.1);
+}
+
+.flight-card-select:disabled {
+  cursor: default;
+  opacity: 0.75;
+}
+
+.flight-card-selected {
+  border-color: #16243a;
+  box-shadow: 0 0 0 1px #16243a;
+}
+
+.flight-card-selected .flight-card-aside {
+  background: #16243a;
+}
+
+.flight-card-selected .flight-card-deal,
+.flight-card-selected .flight-card-price strong {
+  color: var(--white);
+}
+
+.flight-card-selected .flight-card-select {
+  background: var(--white);
+  color: #16243a;
+}
+
+.flight-card-dimmed {
+  opacity: 0.5;
+  transition: opacity 200ms ease;
+}
+
+.flight-card-dimmed:hover {
+  opacity: 1;
+}
+
+/* ── Flight booking draft / confirmed card ─────────────────────────────── */
+
+.booking-card {
+  align-self: flex-start;
+  width: min(720px, 100%);
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-top: 4px solid var(--gold);
+  border-radius: 14px;
+  background: var(--white);
+}
+
+.booking-card-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.booking-card-header h2 {
+  margin: 0 0 4px;
+  font-size: 18px;
+  letter-spacing: -0.01em;
+}
+
+.booking-pnr {
+  display: inline-block;
+  margin: 0 0 6px;
+  padding: 5px 10px;
+  border-radius: 8px;
+  background: var(--ink);
+  color: var(--white);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+.booking-route-line {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.booking-flight-summary {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fafaf6;
+}
+
+.booking-flight-airline {
+  display: grid;
+  gap: 2px;
+}
+
+.booking-flight-airline strong {
+  font-size: 14px;
+  letter-spacing: -0.005em;
+}
+
+.booking-flight-airline span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.booking-flight-route {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 12px;
+}
+
+.booking-flight-endpoint {
+  display: grid;
+  gap: 2px;
+}
+
+.booking-flight-endpoint:last-child {
+  text-align: right;
+}
+
+.booking-flight-endpoint strong {
+  font-size: 18px;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+
+.booking-flight-endpoint span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.booking-flight-duration {
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.booking-card-footer {
+  display: grid;
+  gap: 10px;
+}
+
+.booking-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.booking-confirm {
+  padding: 11px 16px;
+  border-radius: 10px;
+  background: var(--ink);
+  color: var(--white);
+  font-size: 14px;
+  font-weight: 600;
+  border: 0;
+  cursor: pointer;
+  transition: filter 160ms ease;
+}
+
+.booking-confirm:hover {
+  filter: brightness(0.92);
+}
+
+.booking-cancel {
+  padding: 11px 16px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.booking-cancelled-note {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* ── Section blocks (passengers, fare, conditions) ──────────────────────── */
+
+.booking-section {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--white);
+}
+
+.booking-section-label {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.booking-passenger-row {
+  display: grid;
+}
+
+.booking-passenger-main {
+  display: grid;
+  gap: 2px;
+}
+
+.booking-passenger-main strong {
+  font-size: 14px;
+  letter-spacing: -0.005em;
+  color: var(--ink);
+}
+
+.booking-passenger-main span {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.booking-passenger-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.booking-passenger-row:last-of-type {
+  border-bottom: 0;
+}
+
+.booking-passenger-row.invalid .booking-passenger-main strong {
+  color: var(--muted);
+}
+
+.booking-passenger-warn {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(196, 51, 42, 0.1);
+  color: #c4332a;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.booking-passenger-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.booking-passenger-edit,
+.booking-passenger-delete {
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid var(--line);
+  background: var(--white);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.booking-passenger-edit:hover {
+  background: var(--surface);
+}
+
+.booking-passenger-delete {
+  color: #c4332a;
+  border-color: rgba(196, 51, 42, 0.2);
+}
+
+.booking-passenger-delete:hover {
+  background: rgba(196, 51, 42, 0.05);
+}
+
+.booking-passenger-add {
+  margin-top: 6px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: transparent;
+  border: 1px dashed var(--line-strong);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.booking-passenger-add:hover:not(:disabled) {
+  background: var(--surface);
+}
+
+.booking-passenger-add:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Passenger edit form (modal-ish overlay) ───────────────────────────── */
+
+.booking-passenger-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(23, 23, 23, 0.5);
+  backdrop-filter: blur(4px);
+}
+
+.booking-passenger-form {
+  width: min(420px, 100%);
+  max-height: 90vh;
+  overflow-y: auto;
+  display: grid;
+  gap: 10px;
+  padding: 20px;
+  border-radius: 16px;
+  background: var(--white);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.25);
+}
+
+.booking-passenger-form h3 {
+  margin: 0 0 4px;
+  font-size: 17px;
+  letter-spacing: -0.01em;
+}
+
+.booking-passenger-form label {
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+}
+
+.booking-passenger-form input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--ink);
+  background: var(--white);
+}
+
+.booking-passenger-form input:focus {
+  outline: 2px solid var(--line-strong);
+  border-color: var(--line-strong);
+}
+
+.booking-passenger-form-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.booking-passenger-form-cancel,
+.booking-passenger-form-save {
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  border: 0;
+  cursor: pointer;
+}
+
+.booking-passenger-form-cancel {
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.booking-passenger-form-save {
+  background: var(--ink);
+  color: var(--white);
+}
+
+.booking-passenger-form-save:hover {
+  filter: brightness(0.92);
+}
+
+.booking-confirm:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.booking-fare-rows {
+  display: grid;
+  gap: 6px;
+}
+
+.booking-fare-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+}
+
+.booking-fare-row span {
+  color: var(--muted);
+}
+
+.booking-fare-row strong {
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.booking-fare-total {
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+}
+
+.booking-fare-total span {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.booking-fare-total strong {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.booking-conditions {
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.booking-conditions-label {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-right: 6px;
+}
+
+/* ── Phone layout — stack price below route ──────────────────── */
+
+@media (max-width: 540px) {
+  .flight-card {
+    grid-template-columns: 1fr;
+  }
+
+  .flight-card-main {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    padding: 14px 14px 12px;
+  }
+
+  .flight-card-airline {
+    justify-self: start;
+  }
+
+  .flight-card-route {
+    grid-template-columns: auto 1fr auto;
+    gap: 10px;
+  }
+
+  .flight-card-endpoint strong {
+    font-size: 20px;
+  }
+
+  .flight-card-aside {
+    grid-template-columns: 1fr auto;
+    grid-template-rows: auto;
+    align-items: center;
+    border-left: 0;
+    border-top: 1px solid var(--line);
+    padding: 12px 14px;
+    min-width: 0;
+  }
+
+  .flight-card-price {
+    text-align: left;
+  }
+
+  .flight-card-select {
+    margin-top: 0;
+  }
+}
+
 .service-context {
   grid-column: 1 / -1;
   display: grid;
