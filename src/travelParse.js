@@ -87,10 +87,10 @@ function parseDate(message, today = new Date()) {
   const iso = text.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
   if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
 
-  // Month name + day: "june 24", "jun 24"
+  // Month name + day: "june 24", "jun 24th", "june 24 th"
   const months = ["january","february","march","april","may","june","july","august","september","october","november","december"];
   const monthAbbr = ["jan","feb","mar","apr","may","jun","jul","aug","sep","sept","oct","nov","dec"];
-  const monthDay = text.match(/\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t|tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+(\d{1,2})(?:st|nd|rd|th)?\b/);
+  const monthDay = text.match(/\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t|tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+(\d{1,2})(?:\s*(?:st|nd|rd|th))?\b/);
   if (monthDay) {
     const monthKey = monthDay[1].slice(0, 3);
     let monthIdx = months.findIndex((m) => m.startsWith(monthKey));
@@ -104,8 +104,8 @@ function parseDate(message, today = new Date()) {
     }
   }
 
-  // Day + month: "23 june", "23rd jun" (Indian / British order)
-  const dayMonth = text.match(/\b(\d{1,2})(?:st|nd|rd|th)?\s+(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t|tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b/);
+  // Day + month: "23 june", "23rd jun", "24 th june" (Indian / British order, with detached ordinal)
+  const dayMonth = text.match(/\b(\d{1,2})(?:\s*(?:st|nd|rd|th))?\s+(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t|tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b/);
   if (dayMonth) {
     const monthKey = dayMonth[2].slice(0, 3);
     let monthIdx = months.findIndex((m) => m.startsWith(monthKey));
@@ -160,11 +160,20 @@ function resolveCityToIata(cityText) {
   if (!cityText) return null;
   const cleaned = String(cityText).toLowerCase().trim().replace(/[.,!?]+$/, "");
   if (US_CITY_TO_IATA.has(cleaned)) return US_CITY_TO_IATA.get(cleaned);
-  // Try progressively shorter prefixes (handles "los angeles area" → "los angeles")
-  const words = cleaned.split(/\s+/);
+  const words = cleaned.split(/\s+/).filter(Boolean);
+  // Try progressively shorter prefixes — handles "los angeles area" → "los angeles"
   for (let len = words.length; len >= 1; len -= 1) {
     const candidate = words.slice(0, len).join(" ");
     if (US_CITY_TO_IATA.has(candidate)) return US_CITY_TO_IATA.get(candidate);
+  }
+  // Try progressively shorter suffixes — handles "flights for la" → "la"
+  for (let start = 1; start < words.length; start += 1) {
+    const candidate = words.slice(start).join(" ");
+    if (US_CITY_TO_IATA.has(candidate)) return US_CITY_TO_IATA.get(candidate);
+  }
+  // Try every single word in isolation — handles "i want vegas" → "vegas"
+  for (const w of words) {
+    if (US_CITY_TO_IATA.has(w)) return US_CITY_TO_IATA.get(w);
   }
   return null;
 }
@@ -227,6 +236,24 @@ function extractFlightSlots(message, today = new Date()) {
       destination = destination || codes[1];
     } else if (codes.length === 1) {
       destination = destination || codes[0];
+    }
+  }
+
+  // Pattern 6: standalone "from X" (e.g., slot-fill continuation: "from los angeles")
+  if (!origin) {
+    const fromOnly = text.match(/\bfrom\s+([A-Za-z][A-Za-z\s.]+?)(?:\s+(?:on|for|next|this|tomorrow|today|in|to)\b|\s+\d|[.,!?]|$)/i);
+    if (fromOnly) {
+      const o = resolveCityToIata(fromOnly[1].trim());
+      if (o) origin = o;
+    }
+  }
+
+  // Pattern 7: standalone "to X" (e.g., slot-fill continuation: "to seattle")
+  if (!destination) {
+    const toOnly = text.match(/\bto\s+([A-Za-z][A-Za-z\s.]+?)(?:\s+(?:on|for|next|this|tomorrow|today|in|from)\b|\s+\d|[.,!?]|$)/i);
+    if (toOnly) {
+      const d = resolveCityToIata(toOnly[1].trim());
+      if (d) destination = d;
     }
   }
 

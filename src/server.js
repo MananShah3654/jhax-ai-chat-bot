@@ -373,6 +373,7 @@ async function handleChat({ body, mcp, rag }) {
   if (session.pendingFlightBooking && cancelsOrder(message)) {
     const cancelled = { ...session.pendingFlightBooking, status: "cancelled" };
     session.pendingFlightBooking = null;
+    session.pendingFlightSlots = null;
     sessions.set(sessionId, session);
     return reply({ intent: "flight_booking_cancelled", booking: cancelled });
   }
@@ -409,43 +410,88 @@ async function handleChat({ body, mcp, rag }) {
         passengers.push({ first_name: "", last_name: "", date_of_birth: "", email: "", phone: "", gender: "" });
       }
       session.pendingFlightBooking = buildBookingFromOffer({ offer, idx, passengers, session });
+      session.pendingFlightSlots = null;
       sessions.set(sessionId, session);
       return reply({ intent: "flight_draft", booking: session.pendingFlightBooking });
     }
   }
 
-  // 3b. Flight search (Travel pillar)
-  if (wantsFlightSearch(message)) {
-    const slots = extractFlightSlots(message);
-    if (slots.missing.length > 0) {
+  // 3b. Flight search (Travel pillar) — fresh search OR continuing slot-fill
+  const continuingSlotFill = !!session.pendingFlightSlots;
+  const explicitFlightWord = wantsFlightSearch(message);
+  // Pre-extract so we can also detect implicit flight intent ("nyc to la 24 june"
+  // — no "flight" word, but parses to two airports + date).
+  const preParsed = extractFlightSlots(message);
+  const implicitFlightIntent = Boolean(preParsed.origin && preParsed.destination);
+  if (explicitFlightWord || implicitFlightIntent || continuingSlotFill) {
+    const fresh = preParsed;
+    // If we're continuing a slot-fill, merge with previously gathered slots.
+    // New non-null values take priority; otherwise keep what we had.
+    const base = continuingSlotFill ? session.pendingFlightSlots : null;
+    const merged = base ? {
+      origin: fresh.origin || base.origin,
+      destination: fresh.destination || base.destination,
+      departDate: fresh.departDate || base.departDate,
+      passengers: fresh.passengers > 1 ? fresh.passengers : (base.passengers || 1),
+      cabinClass: fresh.cabinClass !== "economy" ? fresh.cabinClass : (base.cabinClass || "economy")
+    } : fresh;
+
+    // If continuing AND the new message contributed nothing recognisable, drop the
+    // slot-fill state so the user can pivot to a different intent without getting
+    // re-asked. We detect "contributed nothing" as: no flight word in the message
+    // AND the new turn didn't fill any missing slot.
+    if (continuingSlotFill && !wantsFlightSearch(message)) {
+      const contributed = Boolean(fresh.origin || fresh.destination || fresh.departDate
+        || (fresh.passengers && fresh.passengers > 1));
+      if (!contributed) {
+        session.pendingFlightSlots = null;
+        sessions.set(sessionId, session);
+        // fall through to default routing
+      }
+    }
+
+    const stillFilling = session.pendingFlightSlots || explicitFlightWord || implicitFlightIntent;
+    if (stillFilling) {
+      const missing = [];
+      if (!merged.origin) missing.push("origin");
+      if (!merged.destination) missing.push("destination");
+      if (!merged.departDate) missing.push("depart_date");
+      merged.missing = missing;
+
+      if (missing.length > 0) {
+        session.pendingFlightSlots = merged;
+        sessions.set(sessionId, session);
+        return reply({
+          intent: "flight_needs_slots",
+          flightSlots: merged,
+          missingSlots: missing
+        });
+      }
+
+      const flightResult = await mcp.execute("search_flights", {
+        origin: merged.origin,
+        destination: merged.destination,
+        depart_date: merged.departDate,
+        passengers: merged.passengers,
+        cabin_class: merged.cabinClass
+      }, sessionId);
+      if (flightResult.error) {
+        return reply({
+          intent: "flight_search_error",
+          flightSlots: merged,
+          flightError: flightResult.error
+        });
+      }
+      session.pendingFlightSlots = null;
+      session.lastFlightOffers = flightResult.offers;
+      session.lastFlightSlots = merged;
+      sessions.set(sessionId, session);
       return reply({
-        intent: "flight_needs_slots",
-        flightSlots: slots,
-        missingSlots: slots.missing
+        intent: "flight_search_results",
+        flightSlots: merged,
+        flights: flightResult.offers.slice(0, 4)
       });
     }
-    const flightResult = await mcp.execute("search_flights", {
-      origin: slots.origin,
-      destination: slots.destination,
-      depart_date: slots.departDate,
-      passengers: slots.passengers,
-      cabin_class: slots.cabinClass
-    }, sessionId);
-    if (flightResult.error) {
-      return reply({
-        intent: "flight_search_error",
-        flightSlots: slots,
-        flightError: flightResult.error
-      });
-    }
-    session.lastFlightOffers = flightResult.offers;
-    session.lastFlightSlots = slots;
-    sessions.set(sessionId, session);
-    return reply({
-      intent: "flight_search_results",
-      flightSlots: slots,
-      flights: flightResult.offers.slice(0, 4)
-    });
   }
 
   // 4. Combo upgrade (must check before generic add)

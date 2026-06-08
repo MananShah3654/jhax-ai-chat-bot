@@ -94,6 +94,16 @@ Grounding rules:
 - If the requested data is missing from the context, say what IS available instead.
 - Keep answers concise, specific, and tied to the provided context.
 
+Response style — precise, like Claude:
+- Open with the answer. No "Sure!", "We've found", "Got it —", "I see you're looking for", "Your top options are" preambles.
+- Do not restate the user's question back to them.
+- Use specific names, codes, and numbers from the context. JFK not "the airport". $163 not "around 160 dollars". 5h 52m not "about six hours".
+- Cards in the UI already show flight / menu / order detail. Do NOT duplicate them in prose — give a one-sentence summary that adds judgment ("Iberia is the cheapest at $163") or a next step.
+- Keep replies under 2-3 sentences unless explicitly listing items. For genuine lists, one tight line per item, no nested bullets.
+- End with at most ONE next-step prompt. Never chain "Would you like X? Or Y? Or Z?" questions.
+- Confident, not hedging. "Iberia at $163 is cheapest." not "Iberia might be a good option for you to consider."
+- Use the user's vocabulary. If they said "NYC", say "NYC" or "JFK". Don't switch to "New York City" unless it adds clarity.
+
 Safety rules:
 - Never reveal sales counts, payroll, revenue, payment tokens, vendor data, or other private business data.
 - Never claim an order is placed unless the allowed context shows it is confirmed.
@@ -102,27 +112,50 @@ Safety rules:
 
 const PILLAR_PROMPTS = {
   [CAPABILITY_PILLARS.DISCOVERY]: `You are handling the Discovery pillar.
-Focus on restaurants, hours, nearby/open-now guidance, menu exploration, budget filters, dietary filters, and demand-aware ranking.
-Return only the best few matches and explain why they fit.`,
+Focus on restaurants, hours, open-now, menu exploration, budget filters, dietary filters, and demand-aware ranking.
+The UI renders menu/location cards — don't duplicate their fields in prose. Give a ONE-sentence framing ("3 picks under $10, Tacos at $3.13 is the steal") and stop.`,
   [CAPABILITY_PILLARS.ORDERING]: `You are handling the Ordering pillar.
 Focus on draft orders, item selection, cart updates, modifiers, pickup/delivery notes, combo upgrades, and order status.
-Use the active session and draft order details when they exist.`,
+The UI renders order cards with line items + wallet split. Keep prose to one sentence with the next action ("Drafted — say confirm to place." or "Added fries. Anything else?").`,
   [CAPABILITY_PILLARS.PAYMENTS]: `You are handling the Payments pillar.
-Focus on wallet balance, payment actions, split bill, QR pay, invoice pay, payment requests, and tip-and-close.
-Be exact about amounts and never overstate what has happened.`,
+Focus on wallet balance, recharge, split bill, QR pay, invoice pay, payment requests, tip-and-close.
+Be exact about amounts. Don't restate the user's request. "Split $120 four ways: $30 each." not "I'd be happy to help you split that bill for you and your friends..."`,
   [CAPABILITY_PILLARS.REWARDS]: `You are handling the Rewards pillar.
-Focus on points, coupons, cashback, milestone progress, best discount application, and rewards eligibility.
-Use only the retrieved rewards data and current draft order context.`,
+Focus on points, coupons, cashback, milestones, best-discount application.
+State the number, then the next step. "120 points, $2.50 cashback. Closest reward is 30 points away."`,
   [CAPABILITY_PILLARS.SMART_AI]: `You are handling the Smart AI pillar.
-Focus on personalized recommendations, similar items or merchants, group planning, and behavior-based suggestions.
-Explain recommendations briefly using the retrieved history and preference context.`,
+Focus on personalized recommendations, similar items/merchants, group planning, behavior-based suggestions.
+Lead with the recommendation, then one line of why. "Try the Pastrami Combo — you've ordered the regular pastrami 3x in the last month."`,
   [CAPABILITY_PILLARS.TRAVEL]: `You are handling the Travel pillar (JhaPay travel bookings — US flights only for now).
-When the context contains a flight offer list, summarize the top 2-3 options as natural prose: airline, route, depart/arrive times, duration, stops, and total price. Encourage the user to say "book flight 1" or tap the card.
-When the context says slots are missing (origin / destination / depart_date), ask only for what's missing in one short sentence. Do not list all 3 if only 1 is missing.
-When the context has intent flight_draft (user just picked an offer), confirm the selection in one short sentence with the airline + route + price, then ask the user to say "confirm" to book or "cancel" to drop it.
-When the context has intent flight_booking_confirmed, announce the booking is confirmed, share the PNR, and add a one-line have-a-great-trip note. Do not invent details.
-When the context has intent flight_booking_cancelled, acknowledge the cancellation in one short, friendly sentence.
-Never invent flight numbers, prices, times, airports, or PNRs — use only what's in the context. If the context says no offers were found or a Duffel error occurred, say so plainly and suggest a different date or route.`
+
+The chat UI renders rich cards for flights and bookings. Your text reply sits ABOVE the cards. Don't duplicate what the cards already show — add judgment, a recommendation, or a clean next-step.
+
+flight_search_results — give a ONE-sentence summary, max two. Lead with how many options and the cheapest. Examples:
+  Good: "4 non-stop options. Iberia is cheapest at $163. Tap Select on any card to book."
+  Good: "Found 4 flights, all about 5h 52m. Cheapest is British Airways at $162."
+  Bad:  "We've found some flights from JFK to LAX on June 24. Here are the top options: 1. Duffel Airways has a non-stop flight departing at 5:48 PM..." (duplicates the cards)
+  Bad:  "You're looking for flights from New York to Los Angeles..." (restates the question)
+
+flight_needs_slots — ONE short sentence. Acknowledge what you HAVE (with codes, not full names), ask for only what's missing. Examples:
+  Good: "LAX→LAS so far. When are you flying?"
+  Good: "Got the date. Flying from where, to where?"
+  Bad:  "We have your origin as LAX (Los Angeles) and destination as LAS (Las Vegas), but we're missing your departure date. Can you please provide the date you'd like to travel?" (too wordy)
+  Bad:  "Got it — I also need where you're flying from and where you're flying to and your depart date to search." (robotic)
+
+flight_draft — ONE sentence. Mention airline + route + price. Tell them to confirm or cancel.
+  Good: "Iberia LAX→JFK for $163. Tap Confirm & pay to book, or Cancel to drop it."
+  Bad:  "You've selected an Iberia flight from Los Angeles International Airport (LAX) to John F. Kennedy International Airport (JFK), which costs a total of $163. Please confirm..." (overlong)
+
+flight_booking_confirmed — Lead with the PNR. Add one short follow-up line.
+  Good: "Booked. PNR JHA5USFV. Itinerary will hit your email; check-in opens 24h before departure."
+  Bad:  "Your flight booking is confirmed! Your PNR is JHA5USFV. We hope you have a wonderful trip and..." (excessive)
+
+flight_booking_cancelled — ONE line. "Dropped — no charge."
+
+flight_search_error — Say what failed plainly, suggest a fix in one line.
+  Good: "Duffel rejected that date — sandbox only accepts after Jun 5. Try a later date."
+
+Never invent flight numbers, prices, times, airports, or PNRs — only use what's in the context.`
 };
 
 const RAG_ELIGIBLE_INTENTS = new Set([
@@ -968,45 +1001,67 @@ function localAnswer({ message, context, pendingOrder }) {
     return `${header}\n\n${buildItemList(items)}\n\nSay "order 1", "order 2", etc. to place any of these.`;
   }
 
-  // Flight intents
+  // Flight intents — short, Claude-style
   if (intent === "flight_needs_slots") {
+    const slots = context.flightSlots || {};
     const missing = context.missingSlots || [];
-    if (missing.length === 0) return "Tell me your origin, destination, and depart date and I'll search flights.";
-    const map = { origin: "where you're flying from", destination: "where you're flying to", depart_date: "your depart date" };
-    const phrased = missing.map((m) => map[m] || m);
-    return `Got it — I also need ${phrased.join(" and ")} to search.`;
+    if (missing.length === 0) return "Tell me your origin, destination, and depart date and I'll search.";
+    const have = [];
+    if (slots.origin) have.push(slots.origin);
+    if (slots.destination) have.push(slots.destination);
+    const haveLabel = have.length === 2 ? `${have[0]}→${have[1]}` : have.length === 1 ? have[0] : "";
+    const dateLabel = slots.departDate ? slots.departDate : "";
+    const prefix = haveLabel || dateLabel
+      ? `${[haveLabel, dateLabel].filter(Boolean).join(" · ")} so far. `
+      : "";
+    if (missing.length === 3) return "Flying from where, to where, and when?";
+    if (missing.length === 2 && missing.includes("origin") && missing.includes("destination")) return `${prefix}Flying from where, to where?`;
+    if (missing.length === 2 && missing.includes("origin") && missing.includes("depart_date")) return `${prefix}Flying from where, and when?`;
+    if (missing.length === 2 && missing.includes("destination") && missing.includes("depart_date")) return `${prefix}Flying to where, and when?`;
+    if (missing.includes("origin")) return `${prefix}Flying from where?`;
+    if (missing.includes("destination")) return `${prefix}Flying to where?`;
+    if (missing.includes("depart_date")) return `${prefix}When are you flying?`;
+    return `${prefix}Need a bit more info to search.`;
   }
   if (intent === "flight_search_results") {
     const flights = context.flights || [];
-    if (flights.length === 0) return "No flights found for that route and date. Try a different date or nearby airport.";
-    const lines = flights.slice(0, 3).map((f, i) => {
-      const s = f.slices[0];
-      const stops = s.stops === 0 ? "Non-stop" : `${s.stops} stop${s.stops > 1 ? "s" : ""}`;
-      return `${i + 1}. ${f.airline.name} ${s.segments[0]?.flight_number || ""} · ${s.origin} → ${s.destination} · ${s.duration_label || ""} · ${stops} · ${f.total_currency} ${f.total_amount}`;
-    });
-    return `Here are the top options:\n${lines.join("\n")}\nSay "book flight 1" to start a draft.`;
+    if (flights.length === 0) return "No flights found. Try a different date or nearby airport.";
+    const cheapest = flights.reduce((a, b) => Number(a.total_amount) < Number(b.total_amount) ? a : b);
+    const allNonStop = flights.every((f) => f.slices?.[0]?.stops === 0);
+    const stopsLabel = allNonStop ? " non-stop" : "";
+    const price = formatPrice(cheapest.total_amount, cheapest.total_currency);
+    return `${flights.length}${stopsLabel} option${flights.length > 1 ? "s" : ""}. ${cheapest.airline?.name || "Cheapest"} is cheapest at ${price}. Tap Select on any card to book.`;
   }
   if (intent === "flight_search_error") {
-    return `I couldn't run that search. Duffel said: ${context.flightError || "unknown error"}. Try a different date or route.`;
+    return `That search failed: ${context.flightError || "unknown error"}. Try a different date or route.`;
   }
   if (intent === "flight_draft") {
     const offer = context.booking?.offer || {};
     const slice = offer.slices?.[0] || {};
-    const seg = slice.segments?.[0] || {};
-    const price = `${offer.total_currency || "USD"} ${offer.total_amount || "—"}`;
-    return `Drafted: ${offer.airline?.name || "Airline"} ${seg.flight_number || ""} · ${slice.origin || ""} to ${slice.destination || ""} · ${slice.duration_label || ""} · ${price}.\nSay "confirm" to book this, or "cancel" to drop it.`;
+    const price = formatPrice(offer.total_amount, offer.total_currency);
+    return `${offer.airline?.name || "Flight"} ${slice.origin || ""}→${slice.destination || ""} for ${price}. Tap Confirm & pay to book, or Cancel to drop it.`;
   }
   if (intent === "flight_booking_confirmed") {
     const offer = context.booking?.offer || {};
     const slice = offer.slices?.[0] || {};
-    const price = `${offer.total_currency || "USD"} ${offer.total_amount || "—"}`;
-    return `Booking confirmed. PNR: ${context.booking?.pnr || "—"}\n${offer.airline?.name || "Airline"} · ${slice.origin || ""} to ${slice.destination || ""} · ${price}.\nHave a great trip.`;
+    const pnr = context.booking?.pnr || "—";
+    return `Booked. PNR ${pnr}. ${offer.airline?.name || "Flight"} ${slice.origin || ""}→${slice.destination || ""}. Check-in opens 24h before departure.`;
   }
   if (intent === "flight_booking_cancelled") {
-    return "No problem, I dropped that draft. Nothing was booked or charged.";
+    return "Dropped — no charge.";
   }
 
   return "I can help with the menu, restaurant locations, hours, and placing orders. Try: \"best burgers under $15\", \"vegan options\", \"trending places\", or \"plan dinner for 4 under $60\".";
+}
+
+function formatPrice(amount, currency) {
+  if (amount === undefined || amount === null || amount === "") return "—";
+  const n = Number(amount);
+  const value = Number.isFinite(n) ? n.toFixed(2) : String(amount);
+  const ccy = String(currency || "USD").toUpperCase();
+  const SYMBOLS = { USD: "$", EUR: "€", GBP: "£", INR: "₹", CAD: "CA$", AUD: "A$", JPY: "¥" };
+  const symbol = SYMBOLS[ccy];
+  return symbol ? `${symbol}${value}` : `${ccy} ${value}`;
 }
 
 function formatOrder(order, heading) {
