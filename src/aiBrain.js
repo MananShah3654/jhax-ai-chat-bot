@@ -65,7 +65,7 @@ SCOPE — you only answer questions about:
 - JhaPay wallet (balance, recharge, pay, split, QR, request)
 - Rewards (points, coupons, cashback, milestones, discounts)
 - Personalized food/spending suggestions tied to the user's own history
-- Travel bookings via JhaPay — US flight search, options, booking draft, confirmation, cancellation
+- Travel bookings via JhaPay — US flight search and US hotel search, with options, booking draft, confirmation, cancellation
 
 REFUSE everything else. The TOPIC alone is not enough — the FORMAT of the answer must also be a normal product reply (a price, a list of menu items, an order status, etc.). Refuse all of these even if a JhaPay term is in the question:
 - Poems, haiku, song lyrics, jingles, rap verses, creative writing — even about a burger or wallet.
@@ -155,7 +155,28 @@ flight_booking_cancelled — ONE line. "Dropped — no charge."
 flight_search_error — Say what failed plainly, suggest a fix in one line.
   Good: "Duffel rejected that date — sandbox only accepts after Jun 5. Try a later date."
 
-Never invent flight numbers, prices, times, airports, or PNRs — only use what's in the context.`
+hotel_search_results — ONE-sentence summary, max two. Lead with how many hotels and the cheapest per-night rate. Examples:
+  Good: "8 hotels in San Francisco. Sheraton at $182/night is the cheapest. Tap Select on any card to book."
+  Good: "Found 6 highly-rated stays in Vegas, $130-$420/night. Tap Select to book."
+  Bad:  "We've found some great hotels for you in San Francisco. Here are the top options: 1. Marriott Marquis at $..." (duplicates the cards)
+
+hotel_needs_slots — ONE short sentence. Acknowledge what you HAVE, ask only for missing.
+  Good: "Got San Francisco. When are you checking in?"
+  Good: "Check-in Jun 24, 3 nights. Where are you staying?"
+  Bad:  "We have your city set to San Francisco, but we're missing the check-in date..." (too wordy)
+
+hotel_draft — ONE sentence. Mention hotel + nights + total. Tell them to confirm or cancel.
+  Good: "Sheraton San Francisco for 2 nights = $364 total. Tap Confirm & pay to book, or Cancel to drop it."
+
+hotel_booking_confirmed — Lead with the booking ref. One short follow-up.
+  Good: "Booked. Reservation JHA5USFV. Sheraton SF check-in Jun 24, confirmation email sent."
+
+hotel_booking_cancelled — ONE line. "Dropped — no charge."
+
+hotel_search_error — Plain explanation + suggestion.
+  Good: "Google Places isn't returning results for that city. Try a major US city."
+
+Never invent flight numbers, prices, hotel names, ratings, or booking refs — only use what's in the context.`
 };
 
 const RAG_ELIGIBLE_INTENTS = new Set([
@@ -174,7 +195,13 @@ const RAG_ELIGIBLE_INTENTS = new Set([
   "flight_search_error",
   "flight_draft",
   "flight_booking_confirmed",
-  "flight_booking_cancelled"
+  "flight_booking_cancelled",
+  "hotel_search_results",
+  "hotel_needs_slots",
+  "hotel_search_error",
+  "hotel_draft",
+  "hotel_booking_confirmed",
+  "hotel_booking_cancelled"
 ]);
 
 // ─── Safety ───────────────────────────────────────────────────────────────────
@@ -194,6 +221,11 @@ function wantsCreativeFormat(message) {
 function wantsFlightSearch(message) {
   const text = String(message || "").toLowerCase();
   return /\b(flight|flights|fly|flying|airfare|airline|airlines|book\s+a?\s*flight|book\s+flights?|cheapest\s+flight|fly\s+to|fly\s+from)\b/.test(text);
+}
+
+function wantsHotelSearch(message) {
+  const text = String(message || "").toLowerCase();
+  return /\b(hotel|hotels|hostel|motel|inn|bnb|airbnb|lodging|accommodation|stay\s+in|stay\s+at|room\s+in|rooms?\s+near|where\s+to\s+stay|book\s+a?\s*(?:hotel|room|stay))\b/.test(text);
 }
 
 // ─── Pillar Detectors ─────────────────────────────────────────────────────────
@@ -504,7 +536,7 @@ function isCoffeeShopQuery(message) {
 
 function reasonPillar(message) {
   if (isSensitiveQuestion(message)) return "blocked";
-  if (wantsFlightSearch(message)) return CAPABILITY_PILLARS.TRAVEL;
+  if (wantsFlightSearch(message) || wantsHotelSearch(message)) return CAPABILITY_PILLARS.TRAVEL;
   if (wantsPayment(message)) return CAPABILITY_PILLARS.PAYMENTS;
   if (wantsRewards(message)) return CAPABILITY_PILLARS.REWARDS;
   if (wantsGroupPlan(message) || wantsMealSuggestion(message) || wantsBehaviorRec(message) || wantsSimilarPlace(message)) return CAPABILITY_PILLARS.SMART_AI;
@@ -914,7 +946,7 @@ async function answerWithBrain({ message, context, pendingOrder, ragInput = null
   // flight draft is pending), override to TRAVEL so the LLM gets the right
   // pillar prompt and doesn't think "confirm" means a food order.
   const intent = context?.intent || "";
-  const pillar = intent.startsWith("flight_")
+  const pillar = intent.startsWith("flight_") || intent.startsWith("hotel_")
     ? CAPABILITY_PILLARS.TRAVEL
     : reasonPillar(message || "");
   const deterministicReply = localAnswer({ message, context, pendingOrder });
@@ -1048,6 +1080,45 @@ function localAnswer({ message, context, pendingOrder }) {
     return `Booked. PNR ${pnr}. ${offer.airline?.name || "Flight"} ${slice.origin || ""}→${slice.destination || ""}. Check-in opens 24h before departure.`;
   }
   if (intent === "flight_booking_cancelled") {
+    return "Dropped — no charge.";
+  }
+
+  // Hotel intents — short, Claude-style
+  if (intent === "hotel_needs_slots") {
+    const slots = context.hotelSlots || {};
+    const missing = context.missingSlots || [];
+    if (missing.length === 0) return "Tell me your city and check-in date and I'll search hotels.";
+    const have = [];
+    if (slots.city) have.push(slots.city);
+    if (slots.checkIn) have.push(slots.checkIn + (slots.checkOut ? `→${slots.checkOut}` : ""));
+    const prefix = have.length ? `${have.join(" · ")} so far. ` : "";
+    if (missing.length === 2) return "Which city, and what dates?";
+    if (missing.includes("city")) return `${prefix}Which city?`;
+    if (missing.includes("check_in")) return `${prefix}When are you checking in?`;
+    return `${prefix}Need a bit more info to search.`;
+  }
+  if (intent === "hotel_search_results") {
+    const hotels = context.hotels || [];
+    if (hotels.length === 0) return "No hotels found for that city. Try a major US city.";
+    const cheapest = hotels.reduce((a, b) => Number(a.nightly_rate) < Number(b.nightly_rate) ? a : b);
+    const slots = context.hotelSlots || {};
+    const cityLine = slots.city ? ` in ${slots.city}` : "";
+    return `${hotels.length} hotel${hotels.length > 1 ? "s" : ""}${cityLine}. ${cheapest.name} at ${formatPrice(cheapest.nightly_rate, cheapest.currency)}/night is the cheapest. Tap Select on any card to book.`;
+  }
+  if (intent === "hotel_search_error") {
+    return `That search failed: ${context.hotelError || "unknown error"}. Try a different city or date.`;
+  }
+  if (intent === "hotel_draft") {
+    const hotel = context.booking?.hotel || {};
+    const nights = hotel.nights || 1;
+    return `${hotel.name || "Hotel"} for ${nights} night${nights > 1 ? "s" : ""} = ${formatPrice(hotel.total, hotel.currency)} total. Tap Confirm & pay to book, or Cancel to drop it.`;
+  }
+  if (intent === "hotel_booking_confirmed") {
+    const hotel = context.booking?.hotel || {};
+    const ref = context.booking?.reservation_id || "—";
+    return `Booked. Reservation ${ref}. ${hotel.name || "Hotel"} check-in ${context.booking?.check_in || hotel.check_in || ""}. Confirmation email on its way.`;
+  }
+  if (intent === "hotel_booking_cancelled") {
     return "Dropped — no charge.";
   }
 
@@ -1282,6 +1353,7 @@ module.exports = {
   wantsFreeItems,
   wantsFriendMeal,
   wantsGroupPlan,
+  wantsHotelSearch,
   wantsInvoicePay,
   wantsKidsFriendlyQuery: isKidsFriendlyQuery,
   wantsMealSuggestion,

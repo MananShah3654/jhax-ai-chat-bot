@@ -253,7 +253,11 @@ function renderContextCards(context) {
   if (context.restaurants?.length) addLocationCards(context.restaurants);
   if (context.menuItems?.length) addMenuOptions(context.menuItems, context.serviceContext);
   if (context.flights?.length) addFlightOptions(context.flights, context.flightSlots);
-  if (context.booking) addFlightBookingCard(context.booking, context.intent);
+  if (context.hotels?.length) addHotelOptions(context.hotels, context.hotelSlots);
+  if (context.booking) {
+    if ((context.intent || "").startsWith("hotel_")) addHotelBookingCard(context.booking, context.intent);
+    else addFlightBookingCard(context.booking, context.intent);
+  }
 }
 
 // ─── Restaurant Loader ────────────────────────────────────────────────────────
@@ -951,6 +955,320 @@ function formatFlightPrice(amount, currency) {
   const SYMBOLS = { USD: "$", EUR: "€", GBP: "£", INR: "₹", CAD: "CA$", AUD: "A$", JPY: "¥" };
   const symbol = SYMBOLS[ccy];
   return symbol ? `${symbol}${value}` : `${ccy} ${value}`;
+}
+
+// ─── Hotel Options ────────────────────────────────────────────────────────────
+
+function addHotelOptions(hotels, slots) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "hotel-options";
+
+  if (slots) {
+    const summary = document.createElement("div");
+    summary.className = "hotel-summary";
+    const dateRange = slots.checkIn && slots.checkOut
+      ? `${formatFlightDate(slots.checkIn)} – ${formatFlightDate(slots.checkOut)}`
+      : (slots.checkIn ? formatFlightDate(slots.checkIn) : "");
+    const guests = `${slots.guests || 1} ${(slots.guests || 1) === 1 ? "guest" : "guests"}`;
+    summary.innerHTML = `<strong>${escapeHtml(slots.city || "")}</strong><span>${escapeHtml(dateRange)} · ${escapeHtml(guests)}</span>`;
+    wrapper.appendChild(summary);
+  }
+
+  hotels.slice(0, 6).forEach((hotel, index) => {
+    wrapper.appendChild(buildHotelCard(hotel, index));
+  });
+
+  messages.appendChild(wrapper);
+  messages.scrollTop = messages.scrollHeight;
+}
+
+function buildHotelCard(hotel, index) {
+  const card = document.createElement("article");
+  card.className = "hotel-card";
+
+  const rating = typeof hotel.rating === "number" ? hotel.rating.toFixed(1) : null;
+  const reviewsCount = hotel.ratings_count ? ` (${formatThousands(hotel.ratings_count)})` : "";
+  const priceLabel = formatFlightPrice(hotel.nightly_rate, hotel.currency);
+  const totalLabel = formatFlightPrice(hotel.total, hotel.currency);
+  const nights = hotel.nights || 1;
+  const amenities = (hotel.amenities || []).slice(0, 3).join(" · ");
+
+  const photoCount = (hotel.photo_urls || []).length;
+  card.innerHTML = `
+    <button type="button" class="hotel-card-photo" style="background-image: url('${escapeHtml(hotel.photo_url || "")}')" aria-label="View ${escapeHtml(hotel.name || "hotel")} photos">
+      ${photoCount > 1 ? `<span class="hotel-card-photo-count">${photoCount} photos</span>` : ""}
+    </button>
+    <div class="hotel-card-body">
+      <div class="hotel-card-head">
+        <strong class="hotel-card-name">${escapeHtml(hotel.name || "Hotel")}</strong>
+        ${rating ? `<span class="hotel-card-rating">★ ${escapeHtml(rating)}<small>${escapeHtml(reviewsCount)}</small></span>` : ""}
+      </div>
+      <p class="hotel-card-address">${escapeHtml(hotel.address || "")}</p>
+      ${amenities ? `<p class="hotel-card-amenities">${escapeHtml(amenities)}</p>` : ""}
+      <div class="hotel-card-foot">
+        <div class="hotel-card-price">
+          <strong>${escapeHtml(priceLabel)}</strong><span>/ night</span>
+          <small>${escapeHtml(totalLabel)} total · ${nights} night${nights > 1 ? "s" : ""}</small>
+        </div>
+        <button type="button" class="hotel-card-select">Select <span aria-hidden="true">→</span></button>
+      </div>
+    </div>
+  `;
+
+  const photoBtn = card.querySelector(".hotel-card-photo");
+  photoBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    openHotelGallery(hotel);
+  });
+
+  const select = card.querySelector(".hotel-card-select");
+  select.addEventListener("click", () => {
+    const wrapper = card.parentElement;
+    if (wrapper) {
+      wrapper.querySelectorAll(".hotel-card").forEach((sibling) => {
+        sibling.classList.toggle("hotel-card-selected", sibling === card);
+        sibling.classList.toggle("hotel-card-dimmed", sibling !== card);
+        const sBtn = sibling.querySelector(".hotel-card-select");
+        if (sBtn) sBtn.disabled = true;
+      });
+      select.textContent = "Selected";
+    }
+    messageInput.value = `book hotel ${index + 1}`;
+    if (typeof chatForm.requestSubmit === "function") chatForm.requestSubmit();
+    else chatForm.dispatchEvent(new Event("submit", { cancelable: true, bubbles: true }));
+  });
+  return card;
+}
+
+function formatThousands(n) {
+  return Number(n).toLocaleString("en-US");
+}
+
+// ─── Hotel Photo Gallery (Lightbox) ───────────────────────────────────────────
+
+function openHotelGallery(hotel) {
+  const urls = (hotel.photo_urls && hotel.photo_urls.length) ? hotel.photo_urls : [hotel.photo_url].filter(Boolean);
+  if (urls.length === 0) return;
+
+  const overlay = document.createElement("div");
+  overlay.className = "hotel-gallery-overlay";
+  overlay.setAttribute("role", "dialog");
+  overlay.setAttribute("aria-modal", "true");
+  overlay.setAttribute("aria-label", `${hotel.name || "Hotel"} photos`);
+
+  // Header: hotel name + counter + close
+  const header = document.createElement("div");
+  header.className = "hotel-gallery-header";
+  header.innerHTML = `
+    <div class="hotel-gallery-title">
+      <strong>${escapeHtml(hotel.name || "Hotel")}</strong>
+      <span class="hotel-gallery-counter">1 / ${urls.length}</span>
+    </div>
+    <button type="button" class="hotel-gallery-close" aria-label="Close">×</button>
+  `;
+
+  // Carousel: horizontal scroll-snap strip
+  const strip = document.createElement("div");
+  strip.className = "hotel-gallery-strip";
+  urls.forEach((url, i) => {
+    const slide = document.createElement("div");
+    slide.className = "hotel-gallery-slide";
+    slide.dataset.index = String(i);
+    const img = document.createElement("img");
+    img.src = url;
+    img.alt = `${hotel.name || "Hotel"} photo ${i + 1}`;
+    img.loading = i === 0 ? "eager" : "lazy";
+    slide.appendChild(img);
+    strip.appendChild(slide);
+  });
+
+  // Navigation arrows (desktop)
+  const prevBtn = document.createElement("button");
+  prevBtn.type = "button";
+  prevBtn.className = "hotel-gallery-arrow hotel-gallery-arrow-prev";
+  prevBtn.setAttribute("aria-label", "Previous photo");
+  prevBtn.textContent = "‹";
+
+  const nextBtn = document.createElement("button");
+  nextBtn.type = "button";
+  nextBtn.className = "hotel-gallery-arrow hotel-gallery-arrow-next";
+  nextBtn.setAttribute("aria-label", "Next photo");
+  nextBtn.textContent = "›";
+
+  overlay.append(header, strip, prevBtn, nextBtn);
+  document.body.appendChild(overlay);
+  document.body.classList.add("gallery-open");
+
+  const counter = header.querySelector(".hotel-gallery-counter");
+
+  // Update counter based on scroll position
+  function updateCounter() {
+    const slideWidth = strip.clientWidth;
+    if (slideWidth === 0) return;
+    const idx = Math.round(strip.scrollLeft / slideWidth);
+    const clamped = Math.max(0, Math.min(urls.length - 1, idx));
+    counter.textContent = `${clamped + 1} / ${urls.length}`;
+  }
+  strip.addEventListener("scroll", updateCounter, { passive: true });
+
+  function scrollBy(direction) {
+    const slideWidth = strip.clientWidth;
+    strip.scrollBy({ left: slideWidth * direction, behavior: "smooth" });
+  }
+  prevBtn.addEventListener("click", () => scrollBy(-1));
+  nextBtn.addEventListener("click", () => scrollBy(1));
+
+  function close() {
+    document.removeEventListener("keydown", onKey);
+    document.body.classList.remove("gallery-open");
+    overlay.remove();
+  }
+  header.querySelector(".hotel-gallery-close").addEventListener("click", close);
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
+  function onKey(e) {
+    if (e.key === "Escape") close();
+    else if (e.key === "ArrowLeft") scrollBy(-1);
+    else if (e.key === "ArrowRight") scrollBy(1);
+  }
+  document.addEventListener("keydown", onKey);
+}
+
+// ─── Hotel Booking Card ───────────────────────────────────────────────────────
+
+function addHotelBookingCard(booking, intent) {
+  const hotel = booking.hotel || {};
+  const wallet = booking.jhapay_wallet || {};
+  const guests = booking.guests || hotel.guests || 1;
+  const nights = hotel.nights || 1;
+  const checkIn = booking.check_in || "";
+  const checkOut = booking.check_out || "";
+  const status = intent === "hotel_booking_confirmed"
+    ? "confirmed"
+    : intent === "hotel_booking_cancelled"
+      ? "cancelled"
+      : "draft";
+
+  const card = document.createElement("article");
+  card.className = "booking-card hotel-booking-card";
+
+  // Header
+  const header = document.createElement("div");
+  header.className = "booking-card-header";
+  const titleBlock = document.createElement("div");
+  const title = document.createElement("h2");
+  title.textContent = status === "confirmed"
+    ? "Confirmed hotel booking"
+    : status === "cancelled"
+      ? "Cancelled draft"
+      : "Draft hotel booking";
+  titleBlock.appendChild(title);
+  if (status === "confirmed" && booking.reservation_id) {
+    const ref = document.createElement("strong");
+    ref.className = "booking-pnr";
+    ref.textContent = `Reservation ${booking.reservation_id}`;
+    titleBlock.appendChild(ref);
+  }
+  const route = document.createElement("p");
+  route.className = "booking-route-line";
+  route.textContent = `${hotel.name || "Hotel"} · ${hotel.city || ""}`;
+  titleBlock.appendChild(route);
+
+  const statusBadge = document.createElement("span");
+  statusBadge.className = `order-status ${status}`;
+  statusBadge.textContent = status;
+  header.append(titleBlock, statusBadge);
+
+  // Photo + key facts
+  const summary = document.createElement("div");
+  summary.className = "hotel-booking-summary";
+  const ratingStr = typeof hotel.rating === "number" ? `★ ${hotel.rating.toFixed(1)}` : "";
+  const bookingPhotoCount = (hotel.photo_urls || []).length;
+  summary.innerHTML = `
+    <button type="button" class="hotel-booking-photo" style="background-image: url('${escapeHtml(hotel.photo_url || "")}')" aria-label="View hotel photos">
+      ${bookingPhotoCount > 1 ? `<span class="hotel-card-photo-count">${bookingPhotoCount} photos</span>` : ""}
+    </button>
+    <div class="hotel-booking-info">
+      <p class="hotel-booking-rating">${escapeHtml(ratingStr)}</p>
+      <p class="hotel-booking-address">${escapeHtml(hotel.address || "")}</p>
+      <div class="hotel-booking-stay">
+        <div><span>Check-in</span><strong>${escapeHtml(formatFlightDate(checkIn))}</strong></div>
+        <div><span>Check-out</span><strong>${escapeHtml(formatFlightDate(checkOut))}</strong></div>
+        <div><span>Guests</span><strong>${guests}</strong></div>
+        <div><span>Nights</span><strong>${nights}</strong></div>
+      </div>
+    </div>
+  `;
+  summary.querySelector(".hotel-booking-photo").addEventListener("click", (e) => {
+    e.stopPropagation();
+    openHotelGallery(hotel);
+  });
+
+  // Fare breakdown
+  const fareSection = document.createElement("div");
+  fareSection.className = "booking-section booking-fare";
+  fareSection.innerHTML = `
+    <p class="booking-section-label">Stay total</p>
+    <div class="booking-fare-rows">
+      <div class="booking-fare-row"><span>${escapeHtml(`${formatFlightPrice(hotel.nightly_rate, hotel.currency)} × ${nights} night${nights > 1 ? "s" : ""}`)}</span><strong>${escapeHtml(formatFlightPrice(hotel.subtotal, hotel.currency))}</strong></div>
+      <div class="booking-fare-row"><span>Taxes & fees</span><strong>${escapeHtml(formatFlightPrice(hotel.taxes, hotel.currency))}</strong></div>
+      <div class="booking-fare-row booking-fare-total"><span>Total</span><strong>${escapeHtml(formatFlightPrice(hotel.total, hotel.currency))}</strong></div>
+    </div>
+  `;
+
+  // Conditions
+  const amenities = (hotel.amenities || []).join(" · ");
+  const conditions = document.createElement("div");
+  conditions.className = "booking-conditions";
+  conditions.innerHTML = `<span class="booking-conditions-label">Includes</span> ${escapeHtml(amenities)} · ${escapeHtml(hotel.cancellation || "")}`;
+
+  // Wallet panel
+  const walletPanel = document.createElement("div");
+  walletPanel.className = "wallet-panel";
+  const walletBrand = document.createElement("div");
+  walletBrand.className = "wallet-brand";
+  walletBrand.innerHTML = `<span>JhaPay</span><small>Wallet</small>`;
+  const walletNumbers = document.createElement("div");
+  walletNumbers.className = "wallet-numbers";
+  walletNumbers.append(
+    walletMetric("Current balance", wallet.balance_before, "wallet-balance"),
+    walletMetric("Stay total", wallet.order_total ?? hotel.total, "wallet-total"),
+    walletMetric("Remaining", wallet.remaining_after, "wallet-remaining")
+  );
+  walletPanel.append(walletBrand, walletNumbers);
+
+  // Footer
+  const footer = document.createElement("div");
+  footer.className = "booking-card-footer";
+  if (status === "draft") {
+    const actions = document.createElement("div");
+    actions.className = "booking-actions";
+    const cancel = document.createElement("button");
+    cancel.type = "button";
+    cancel.className = "booking-cancel secondary-action";
+    cancel.textContent = "Cancel";
+    cancel.addEventListener("click", () => sendChatMessage("cancel"));
+    const confirm = document.createElement("button");
+    confirm.type = "button";
+    confirm.className = "booking-confirm";
+    confirm.textContent = "Confirm & pay";
+    confirm.addEventListener("click", () => sendChatMessage("confirm"));
+    actions.append(cancel, confirm);
+    footer.appendChild(actions);
+  } else if (status === "confirmed") {
+    const eta = document.createElement("span");
+    eta.className = "pickup-eta";
+    eta.textContent = `Check-in opens at 3 PM on ${formatFlightDate(checkIn)}. Confirmation email on its way.`;
+    footer.appendChild(eta);
+  } else if (status === "cancelled") {
+    const note = document.createElement("span");
+    note.className = "booking-cancelled-note";
+    note.textContent = "No charge made.";
+    footer.appendChild(note);
+  }
+
+  card.append(header, summary, fareSection, conditions, walletPanel, footer);
+  messages.appendChild(card);
+  scrollIntoChatView(card);
 }
 
 // ─── Cart ─────────────────────────────────────────────────────────────────────

@@ -1,4 +1,5 @@
 const duffel = require("./duffel");
+const places = require("./googlePlaces");
 
 const toolDefinitions = [
   {
@@ -252,6 +253,20 @@ const toolDefinitions = [
       },
       required: ["origin", "destination", "depart_date"]
     }
+  },
+  {
+    name: "search_hotels",
+    description: "Search real US hotels via Google Places (lodging type). Returns up to a few hotels with name, address, rating, photo, simulated nightly rate, and total price for the stay. City is the US city name (e.g. 'San Francisco', 'Las Vegas').",
+    input_schema: {
+      type: "object",
+      properties: {
+        city: { type: "string", description: "US city name, e.g. 'San Francisco' or 'NYC'." },
+        check_in: { type: "string", description: "Check-in date in YYYY-MM-DD format." },
+        check_out: { type: "string", description: "Check-out date in YYYY-MM-DD format." },
+        guests: { type: "number", description: "Number of guests (1-9). Defaults to 1." }
+      },
+      required: ["city"]
+    }
   }
 ];
 
@@ -299,6 +314,12 @@ function createMcpEngine(store) {
       returnDate: input.return_date,
       passengers: input.passengers || 1,
       cabinClass: input.cabin_class || "economy"
+    }),
+    search_hotels: async (input) => places.searchHotels({
+      city: input.city,
+      checkIn: input.check_in,
+      checkOut: input.check_out,
+      guests: input.guests || 1
     })
   };
 

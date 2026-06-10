@@ -280,10 +280,154 @@ function extractFlightSlots(message, today = new Date()) {
   return { origin, destination, departDate, passengers, cabinClass, missing };
 }
 
+// ─── Hotels ───────────────────────────────────────────────────────────────────
+
+function addDaysIso(iso, n) {
+  if (!iso) return null;
+  const [y, m, d] = String(iso).split("-").map(Number);
+  if (!y || !m || !d) return null;
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() + Number(n || 0));
+  return toIso(dt);
+}
+
+// Map "hotel-friendly" city tokens to a clean display city name. Unlike
+// flights, hotel search wants the human city name (the Places API uses it
+// in the text query) — not an IATA code. We just normalise case + aliases.
+const HOTEL_CITY_ALIASES = new Map([
+  ["nyc", "New York"], ["new york", "New York"], ["new york city", "New York"], ["manhattan", "Manhattan"],
+  ["sf", "San Francisco"], ["san francisco", "San Francisco"],
+  ["la", "Los Angeles"], ["los angeles", "Los Angeles"], ["hollywood", "Hollywood"], ["beverly hills", "Beverly Hills"],
+  ["chicago", "Chicago"],
+  ["miami", "Miami"], ["miami beach", "Miami Beach"], ["fort lauderdale", "Fort Lauderdale"],
+  ["boston", "Boston"],
+  ["seattle", "Seattle"],
+  ["denver", "Denver"],
+  ["atlanta", "Atlanta"],
+  ["vegas", "Las Vegas"], ["las vegas", "Las Vegas"],
+  ["washington", "Washington DC"], ["dc", "Washington DC"], ["washington dc", "Washington DC"],
+  ["phoenix", "Phoenix"],
+  ["philadelphia", "Philadelphia"], ["philly", "Philadelphia"],
+  ["detroit", "Detroit"],
+  ["orlando", "Orlando"],
+  ["austin", "Austin"],
+  ["portland", "Portland"],
+  ["nashville", "Nashville"],
+  ["minneapolis", "Minneapolis"],
+  ["tampa", "Tampa"],
+  ["san diego", "San Diego"],
+  ["charlotte", "Charlotte"],
+  ["baltimore", "Baltimore"],
+  ["salt lake city", "Salt Lake City"], ["salt lake", "Salt Lake City"],
+  ["honolulu", "Honolulu"],
+  ["dallas", "Dallas"],
+  ["houston", "Houston"]
+]);
+
+function resolveCityForHotel(phrase) {
+  if (!phrase) return null;
+  const cleaned = String(phrase).toLowerCase().trim().replace(/[.,!?]+$/, "");
+  if (HOTEL_CITY_ALIASES.has(cleaned)) return HOTEL_CITY_ALIASES.get(cleaned);
+  const words = cleaned.split(/\s+/).filter(Boolean);
+  // Longest prefix
+  for (let len = words.length; len >= 1; len -= 1) {
+    const candidate = words.slice(0, len).join(" ");
+    if (HOTEL_CITY_ALIASES.has(candidate)) return HOTEL_CITY_ALIASES.get(candidate);
+  }
+  // Longest suffix (handles "hotels in vegas" → "vegas")
+  for (let start = 1; start < words.length; start += 1) {
+    const candidate = words.slice(start).join(" ");
+    if (HOTEL_CITY_ALIASES.has(candidate)) return HOTEL_CITY_ALIASES.get(candidate);
+  }
+  // Last-ditch: single-word fallback
+  for (const w of words) {
+    if (HOTEL_CITY_ALIASES.has(w)) return HOTEL_CITY_ALIASES.get(w);
+  }
+  return null;
+}
+
+function extractHotelSlots(message, today = new Date()) {
+  const text = String(message || "");
+  let city = null;
+
+  // Pattern A: "hotels in CITY" / "hotel in CITY" / "stay in CITY"
+  const inCity = text.match(/\b(?:hotels?|stay|rooms?|accommodation)\s+in\s+([A-Za-z][A-Za-z\s.]*?)(?:\s+(?:on|for|from|next|this|tomorrow|today|in|june|jun|july|jul|may|aug|sep|oct|nov|dec|jan|feb|mar|apr)\b|\s+\d|\s+check|[.,!?]|$)/i);
+  if (inCity) city = city || resolveCityForHotel(inCity[1].trim());
+
+  // Pattern B: "book a hotel in CITY"
+  if (!city) {
+    const bookIn = text.match(/\bbook\s+a?\s*(?:hotel|stay|room)\s+(?:in\s+)?([A-Za-z][A-Za-z\s.]*?)(?:\s+(?:on|for|from|next|this|tomorrow|today|in)\b|\s+\d|[.,!?]|$)/i);
+    if (bookIn) city = city || resolveCityForHotel(bookIn[1].trim());
+  }
+
+  // Pattern C: "CITY hotels" / "vegas hotel"
+  if (!city) {
+    const reverse = text.match(/\b([A-Za-z][A-Za-z\s.]*?)\s+(?:hotels?|stays?|rooms?|accommodation)\b/i);
+    if (reverse) city = city || resolveCityForHotel(reverse[1].trim());
+  }
+
+  // Last attempt: any city alias mentioned in the message
+  if (!city) {
+    const lower = text.toLowerCase();
+    for (const alias of HOTEL_CITY_ALIASES.keys()) {
+      const re = new RegExp(`\\b${alias.replace(/\s+/g, "\\s+")}\\b`);
+      if (re.test(lower)) { city = HOTEL_CITY_ALIASES.get(alias); break; }
+    }
+  }
+
+  // Dates: check_in, check_out
+  // Pattern: "from DATE to DATE", "DATE to DATE", "check in DATE check out DATE"
+  let checkIn = null;
+  let checkOut = null;
+
+  const fromTo = text.match(/\bfrom\s+([^.,!?]+?)\s+to\s+([^.,!?]+?)(?:[.,!?]|$)/i);
+  if (fromTo) {
+    checkIn = parseDate(fromTo[1], today);
+    checkOut = parseDate(fromTo[2], today);
+  }
+
+  if (!checkIn) {
+    const checkInMatch = text.match(/\bcheck[\s-]*in\s+(?:on\s+)?([^.,!?]+?)(?:\s+(?:check|and|until|to)\b|[.,!?]|$)/i);
+    if (checkInMatch) checkIn = parseDate(checkInMatch[1], today);
+  }
+  if (!checkOut) {
+    const checkOutMatch = text.match(/\bcheck[\s-]*out\s+(?:on\s+)?([^.,!?]+?)(?:[.,!?]|$)/i);
+    if (checkOutMatch) checkOut = parseDate(checkOutMatch[1], today);
+  }
+
+  // Fallback: if user just gave one date, treat as check-in
+  if (!checkIn) checkIn = parseDate(text, today);
+
+  // Nights — "for 3 nights" / "3 night stay"
+  let nights = null;
+  const nightsMatch = text.match(/\b(\d+)\s+nights?\b/i) || text.match(/\bfor\s+(\d+)\s+nights?\b/i);
+  if (nightsMatch) nights = Math.max(1, Math.min(30, Number(nightsMatch[1])));
+
+  // If we have check-in + nights but no check-out, derive
+  if (checkIn && !checkOut && nights) checkOut = addDaysIso(checkIn, nights);
+  // If we have check-in but no check-out and no nights, default to 1 night
+  if (checkIn && !checkOut) checkOut = addDaysIso(checkIn, 1);
+
+  // Guests
+  let guests = 1;
+  const guestMatch = text.match(/\b(\d+)\s+(?:guests?|people|adults?|travelers?|pax)\b/i)
+                  || text.match(/\bfor\s+(\d+)\s+(?:guests?|people|adults?|travelers?|pax|of\s+us)\b/i);
+  if (guestMatch) guests = Math.max(1, Math.min(9, Number(guestMatch[1])));
+
+  const missing = [];
+  if (!city) missing.push("city");
+  if (!checkIn) missing.push("check_in");
+
+  return { city, checkIn, checkOut, guests, nights, missing };
+}
+
 module.exports = {
   parseDate,
   resolveCityToIata,
   findIataFromText,
   extractFlightSlots,
+  extractHotelSlots,
+  resolveCityForHotel,
+  addDaysIso,
   todayIso
 };

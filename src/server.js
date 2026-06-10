@@ -5,7 +5,7 @@ const path = require("node:path");
 const { createStore } = require("./db");
 const { createMcpEngine } = require("./mcpEngine");
 const { createRagEngine } = require("./rag");
-const { extractFlightSlots } = require("./travelParse");
+const { extractFlightSlots, extractHotelSlots } = require("./travelParse");
 const {
   answerWithBrain,
   cancelsOrder,
@@ -44,6 +44,7 @@ const {
   wantsFreeItems,
   wantsFriendMeal,
   wantsGroupPlan,
+  wantsHotelSearch,
   wantsInvoicePay,
   wantsMealSuggestion,
   wantsMilestoneCheck,
@@ -378,6 +379,27 @@ async function handleChat({ body, mcp, rag }) {
     return reply({ intent: "flight_booking_cancelled", booking: cancelled });
   }
 
+  // 3. Confirm / cancel pending HOTEL booking (must run before food order too)
+  if (session.pendingHotelBooking && confirmsOrder(message)) {
+    const booking = {
+      ...session.pendingHotelBooking,
+      reservation_id: `JHA${Math.random().toString(36).slice(2, 7).toUpperCase()}`,
+      status: "confirmed",
+      confirmed_at: new Date().toISOString()
+    };
+    session.pendingHotelBooking = null;
+    session.lastHotelBooking = booking;
+    sessions.set(sessionId, session);
+    return reply({ intent: "hotel_booking_confirmed", booking });
+  }
+  if (session.pendingHotelBooking && cancelsOrder(message)) {
+    const cancelled = { ...session.pendingHotelBooking, status: "cancelled" };
+    session.pendingHotelBooking = null;
+    session.pendingHotelSlots = null;
+    sessions.set(sessionId, session);
+    return reply({ intent: "hotel_booking_cancelled", booking: cancelled });
+  }
+
   // 3. Confirm / cancel pending FOOD order
   if (session.pendingOrder && confirmsOrder(message)) {
     const order = await mcp.execute("confirm_order", { order_id: session.pendingOrder.id }, sessionId);
@@ -490,6 +512,102 @@ async function handleChat({ body, mcp, rag }) {
         intent: "flight_search_results",
         flightSlots: merged,
         flights: flightResult.offers.slice(0, 4)
+      });
+    }
+  }
+
+  // 3c. "book hotel N" — user tapped Select on a hotel card
+  const bookHotelMatch = message.match(/\bbook\s+hotel\s+(\d{1,2})\b/i);
+  if (bookHotelMatch && session.lastHotelOffers?.length) {
+    const idx = Number(bookHotelMatch[1]) - 1;
+    const hotel = session.lastHotelOffers[idx];
+    if (hotel) {
+      const balanceBefore = session.profile?.wallet_balance ?? 5000.00;
+      const total = Number(hotel.total) || 0;
+      session.pendingHotelBooking = {
+        hotel,
+        selected_index: idx + 1,
+        check_in: hotel.nights > 0 ? (session.lastHotelSlots?.checkIn || null) : null,
+        check_out: session.lastHotelSlots?.checkOut || null,
+        guests: hotel.guests || 1,
+        jhapay_wallet: {
+          balance_before: balanceBefore,
+          order_total: total,
+          remaining_after: Math.max(0, balanceBefore - total),
+          currency: hotel.currency || "USD"
+        }
+      };
+      session.pendingHotelSlots = null;
+      sessions.set(sessionId, session);
+      return reply({ intent: "hotel_draft", booking: session.pendingHotelBooking });
+    }
+  }
+
+  // 3d. Hotel search (Travel pillar) — fresh search OR continuing slot-fill
+  const continuingHotelSlotFill = !!session.pendingHotelSlots;
+  const explicitHotelWord = wantsHotelSearch(message);
+  const preParsedHotel = extractHotelSlots(message);
+  const implicitHotelIntent = Boolean(preParsedHotel.city);
+  if (explicitHotelWord || (implicitHotelIntent && continuingHotelSlotFill) || continuingHotelSlotFill) {
+    const fresh = preParsedHotel;
+    const base = continuingHotelSlotFill ? session.pendingHotelSlots : null;
+    const merged = base ? {
+      city: fresh.city || base.city,
+      checkIn: fresh.checkIn || base.checkIn,
+      checkOut: fresh.checkOut || base.checkOut,
+      guests: fresh.guests > 1 ? fresh.guests : (base.guests || 1),
+      nights: fresh.nights || base.nights || null
+    } : fresh;
+
+    // Pivot detection: if continuing AND new turn contributed nothing, drop state.
+    if (continuingHotelSlotFill && !explicitHotelWord) {
+      const contributed = Boolean(fresh.city || fresh.checkIn || fresh.checkOut
+        || (fresh.guests && fresh.guests > 1) || fresh.nights);
+      if (!contributed) {
+        session.pendingHotelSlots = null;
+        sessions.set(sessionId, session);
+        // fall through
+      }
+    }
+
+    const stillFilling = session.pendingHotelSlots || explicitHotelWord;
+    if (stillFilling) {
+      const missing = [];
+      if (!merged.city) missing.push("city");
+      if (!merged.checkIn) missing.push("check_in");
+      merged.missing = missing;
+
+      if (missing.length > 0) {
+        session.pendingHotelSlots = merged;
+        sessions.set(sessionId, session);
+        return reply({
+          intent: "hotel_needs_slots",
+          hotelSlots: merged,
+          missingSlots: missing
+        });
+      }
+
+      const hotelResult = await mcp.execute("search_hotels", {
+        city: merged.city,
+        check_in: merged.checkIn,
+        check_out: merged.checkOut,
+        guests: merged.guests
+      }, sessionId);
+      if (hotelResult.error) {
+        return reply({
+          intent: "hotel_search_error",
+          hotelSlots: merged,
+          hotelError: hotelResult.error
+        });
+      }
+      session.pendingHotelSlots = null;
+      session.lastHotelOffers = hotelResult.hotels;
+      session.lastHotelSlots = merged;
+      sessions.set(sessionId, session);
+      return reply({
+        intent: "hotel_search_results",
+        hotelSlots: merged,
+        hotels: hotelResult.hotels.slice(0, 6)
       });
     }
   }
