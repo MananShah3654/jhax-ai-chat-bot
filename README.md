@@ -1,17 +1,18 @@
 <div align="center">
 
-# 🍔✈️ JhaPay AI
+# 🍔✈️🏨 JhaPay AI
 
-**A conversational commerce assistant for food, wallet, rewards, and now flight booking.**
+**A conversational commerce assistant for food, wallet, rewards, flights, and hotels.**
 
 Provider-agnostic LLM chat with a guarded tool boundary, real US flight search via
-Duffel, multi-passenger booking, voice input, and a mobile-first UI in the spirit
-of Claude.
+Duffel, real US hotel discovery via Google Places (with 10-photo gallery per hotel),
+multi-passenger booking, voice input, and a mobile-first UI in the spirit of Claude.
 
 [![Node](https://img.shields.io/badge/node-%3E%3D18-339933?logo=node.js&logoColor=white)](https://nodejs.org)
 [![Vercel-ready](https://img.shields.io/badge/deploy-vercel-000000?logo=vercel&logoColor=white)](https://vercel.com)
 [![LLM](https://img.shields.io/badge/LLM-Claude%20%7C%20Groq%20%7C%20OpenAI%20%7C%20Gemini-412991)](#-plug-in-any-model)
 [![Duffel](https://img.shields.io/badge/flights-Duffel-1A1A1A)](#-flight-booking-via-duffel-sandbox)
+[![Places](https://img.shields.io/badge/hotels-Google%20Places-4285F4?logo=google&logoColor=white)](#-hotel-booking-via-google-places)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](#license)
 
 </div>
@@ -38,6 +39,15 @@ A chat interface that turns natural language into safe actions across two domain
 - 💸 **Draft → Confirm flow** with JhaPay wallet split panel and mock PNR on confirmation
 - 🔁 **Fare auto-scales** per-passenger when you add or remove travelers
 - 🚦 **Confirm gate** — disabled until every passenger has name + DOB
+
+### 🏨 Hotel booking (real Google Places + simulated pricing)
+
+- 🌐 **Real US hotel data** — natural language: *"hotels in san francisco from june 24 to june 26"*
+- 📸 **10-photo lightbox gallery** per hotel — tap card photo to open swipeable fullscreen carousel
+- ⭐ **Real ratings & reviews** from Google (4.3 ★, 1.2K reviews) on every card
+- 🛏️ **Hotel cards** with photo, name, rating pill, address, amenities, $/night + total + Select
+- 🛒 **Draft → Confirm flow** with stay grid (check-in / out / guests / nights), fare breakdown, JhaPay wallet split, mock reservation ID
+- 💲 **Deterministic pricing simulation** — same hotel always gets the same price (city base × price level × rating bump × hashed variance)
 
 ### 🎙️ Voice input + 📱 mobile UI
 
@@ -142,6 +152,18 @@ DUFFEL_ACCESS_TOKEN=duffel_test_...
 
 Get a sandbox key at <https://duffel.com> — instant, no card. Production switch is `duffel_live_*` (requires verification).
 
+### Add Google Places for real hotel discovery (optional)
+
+Without it, hotel queries will return an error. With it, hotel cards render with **real US hotels, ratings, addresses, and 10 photos each**.
+
+```ini
+GOOGLE_PLACES_API_KEY=AIza...
+```
+
+Get a key at <https://console.cloud.google.com> → enable **Places API (New)** → create a key. Free up to **$200/month credit** which covers thousands of searches. ⚠️ Requires a card on file (Google verifies but doesn't charge until you exceed the credit).
+
+If you see `Google Places 403`, the Places API isn't enabled yet — visit the link in the error message and click Enable, then wait ~60s for propagation.
+
 ---
 
 ## 🏗️ Architecture
@@ -168,14 +190,17 @@ Get a sandbox key at <https://duffel.com> — instant, no card. Production switc
                                   ▼
                      ┌──────────────────────────┐
                      │  MCP Tool Engine         │   src/mcpEngine.js
-                     │  audited tool surface    │   ~21 JSON-schema'd tools
-                     └─────┬──────────────┬─────┘
-                           ▼              ▼
-              ┌──────────────────┐  ┌──────────────────┐
-              │  Data Layer      │  │  Duffel sandbox  │   src/duffel.js
-              │  Postgres or     │  │  US flights      │
-              │  in-memory store │  │  + bookings      │
-              └──────────────────┘  └──────────────────┘
+                     │  audited tool surface    │   ~22 JSON-schema'd tools
+                     └───┬──────────┬──────────┬┘
+                         ▼          ▼          ▼
+       ┌──────────────────┐ ┌─────────────┐ ┌──────────────────┐
+       │  Data Layer      │ │  Duffel     │ │  Google Places   │
+       │  Postgres or     │ │  sandbox    │ │  (New) Text      │
+       │  in-memory store │ │  US flights │ │  Search — US     │
+       └──────────────────┘ │ + bookings  │ │  hotel discovery │
+                            └─────────────┘ │  + 10 photos     │
+                            src/duffel.js   └──────────────────┘
+                                            src/googlePlaces.js
 ```
 
 ### Where the LLM is — and isn't
@@ -185,9 +210,11 @@ The brain is **hybrid by design**:
 | Path | Handler | Why |
 |---|---|---|
 | Free-form discovery / menu / payments-info / rewards / smart-AI | **LLM** with retrieved RAG context | Natural language is the value-add |
-| Travel slot extraction & search | **Regex + Duffel** | Deterministic, structured |
+| Travel slot extraction (flights & hotels) | **Regex + parsers** | Deterministic, structured, multi-turn aware |
+| Flight search | **Regex + Duffel sandbox** | Real airline data |
+| Hotel search | **Regex + Google Places (New)** | Real US hotel data + photos |
 | Travel narration & slot-fill prompts | **LLM** | Polished phrasing |
-| Order state (draft / confirm / cancel) — food **AND** flight | **Deterministic** regex + tool execution | Money and PNRs must never hallucinate |
+| Order state (draft / confirm / cancel) — food, flight, **and hotel** | **Deterministic** regex + tool execution | Money and PNRs must never hallucinate |
 | Blocked categories (sales, payroll, tokens) | **Deterministic refusal** | Never reaches the model |
 | Creative formats (haiku, poem, rap, song) | **Regex pre-filter** | 100% reliable; doesn't waste an LLM round-trip |
 
@@ -256,6 +283,95 @@ City → IATA map covers **33 major US airports** (JFK, LGA, EWR, LAX, SFO, ORD,
 
 ---
 
+## 🏨 Hotel booking via Google Places
+
+Real US hotel data from Google's Places API (New) with simulated pricing. Same chat flow as flights.
+
+### What "real" means
+
+| What's real | What's not |
+|---|---|
+| ✅ Real Google Places API calls every search | ❌ No live booking — Google doesn't expose a booking API |
+| ✅ Real hotel names, addresses, ★ ratings, review counts | ❌ Nightly rates are simulated (Places doesn't return prices) |
+| ✅ Real Google-served photos (up to 10 per hotel) | ❌ Confirmed reservation ID is a mock `JHA######` |
+| ✅ priceLevel from Places informs the simulation | ❌ Availability isn't checked (every hotel is "available") |
+| ✅ Free up to $200/mo Google Cloud credit | |
+
+### Conversation flow
+
+```text
+User: "hotels in san francisco from june 24 to june 26"
+  → 4-6 hotel cards render in chat:
+      Photo (clickable!) · Name · ★ rating (review count)
+      Address · Top 3 amenities
+      $X/night · $Y total for N nights · [Select]
+
+User: [taps any hotel photo]
+  → Fullscreen lightbox opens
+  → Swipe / arrow keys / click ‹ › through up to 10 photos
+  → Counter "1 / 10" updates as you scroll
+  → ESC or tap outside closes
+
+User: [taps Select on Marriott Marquis]
+  → That card highlights, siblings dim
+  → Draft hotel booking card renders with:
+      • Header + DRAFT badge + gold top bar
+      • Reservation summary: hotel photo + ★ rating + address
+      • Stay grid: Check-in · Check-out · Guests · Nights
+      • Fare breakdown: $/night × N nights + taxes & fees
+      • Conditions: amenities + cancellation policy
+      • JhaPay Wallet: balance / total / remaining
+      • [Cancel]    [Confirm & pay]
+
+User: [taps Confirm & pay]
+  → Confirmed card: "Reservation JHA1XEU9" pill
+  → Status badge → green CONFIRMED
+  → Wallet deducted
+  → "Check-in opens at 3 PM on Jun 24. Confirmation email on its way."
+```
+
+### Hotel slot extraction (`src/travelParse.js`)
+
+`extractHotelSlots()` parses natural language into `{ city, checkIn, checkOut, guests, nights }`. Examples:
+
+| Input | Parsed |
+|---|---|
+| `"hotels in san francisco"` | `{city: "San Francisco", missing: ["check_in"]}` |
+| `"hotels in vegas this weekend for 2 guests"` | `{city: "Las Vegas", checkIn: "...", checkOut: "...", guests: 2}` |
+| `"book a hotel in nyc june 24 to june 26"` | `{city: "New York", checkIn: "2026-06-24", checkOut: "2026-06-26"}` |
+| `"stay in chicago for 3 nights"` | `{city: "Chicago", nights: 3, missing: ["check_in"]}` |
+| `"la hotels next friday"` | `{city: "Los Angeles", checkIn: "2026-06-19", checkOut: "2026-06-20"}` |
+| `"check in june 24 check out june 26 in seattle"` | `{city: "Seattle", checkIn: "2026-06-24", checkOut: "2026-06-26"}` |
+
+City alias map covers **30+ US cities**: NYC, LA, SF, Manhattan, Hollywood, Beverly Hills, Vegas, DC, Philly, etc.
+
+### Pricing simulation
+
+Deterministic per-hotel — same hotel always gets the same price. Computed as:
+
+```text
+base_price_by_city  ×  price_level_multiplier (Places-provided 0-4)
+  ×  (1 ± per_hotel_hash_variance)
+  +  rating_bump ((rating - 4.0) × 35)
+```
+
+City bases range from `$130/night` (Vegas) to `$320/night` (Manhattan). Total adds **13% tax**. Subtotal × nights.
+
+### Multi-photo gallery
+
+Click any hotel photo (on the card OR the booking card) → fullscreen lightbox carousel:
+
+- Up to **10 photos per hotel** from Google Places
+- CSS scroll-snap horizontal strip (one photo per viewport)
+- **Swipe** left/right on touch
+- **‹ / ›** arrows on desktop (hidden under 720px width)
+- **← / → keyboard arrows** to navigate
+- **ESC** or tap-outside to close
+- Live counter shows `current / total`
+- Photos load lazily after the first one (only the visible image hits Google's media SKU)
+
+---
+
 ## 🎙️ Voice input
 
 Built on the browser's **Web Speech API** — no backend, no transcription costs, works in Chrome / Edge / Safari (Firefox doesn't support it, so the mic button hides and Send always shows).
@@ -321,7 +437,8 @@ Wallet:       recharge_wallet · split_bill · create_qr_payment · request_paym
 History:      get_transaction_history · get_spend_insights · get_order_history
               reorder_last_order · get_receipts
 Smart AI:     get_personalized_recommendations · save_deal_alert
-Travel:       search_flights  (Duffel-backed)
+Travel:       search_flights   (Duffel-backed)
+              search_hotels    (Google Places-backed)
 ```
 
 Tools the model **cannot** call (because they don't exist on the tool surface):
@@ -486,8 +603,8 @@ SCOPE — you only answer questions about:
 - JhaPay wallet (balance, recharge, pay, split, QR, request)
 - Rewards (points, coupons, cashback, milestones, discounts)
 - Personalized food/spending suggestions tied to the user's own history
-- Travel bookings via JhaPay — US flight search, options, booking
-  draft, confirmation, cancellation
+- Travel bookings via JhaPay — US flight search AND US hotel search,
+  with options, booking draft, confirmation, cancellation
 
 REFUSE everything else (poems, jokes, code, math, world knowledge,
 role-play). Reply with exactly:
@@ -511,9 +628,10 @@ jhax-ai-chat-bot/
 ├── src/
 │   ├── server.js             # HTTP + SSE + routing + /api/booking/passengers
 │   ├── aiBrain.js            # Pillars · scope guard · LLM dispatcher (Anthropic + OpenAI-compat)
-│   ├── mcpEngine.js          # ~21 JSON-schema'd tools incl. search_flights
+│   ├── mcpEngine.js          # ~22 JSON-schema'd tools incl. search_flights, search_hotels
 │   ├── duffel.js             # Duffel sandbox client (flight search)
-│   ├── travelParse.js        # Slot extraction · date parsing · city→IATA lookup
+│   ├── googlePlaces.js       # Google Places (New) client (hotel search + photo URLs + price simulation)
+│   ├── travelParse.js        # Slot extraction · date parsing · city→IATA + hotel-city alias maps
 │   ├── rag.js                # Pillar-scoped context retrieval
 │   ├── db.js                 # Postgres / in-memory store
 │   ├── demoData.js           # Seed restaurants + menu items
@@ -532,10 +650,11 @@ Before shipping for real, replace the demo stubs with:
 - 🛒 Real POS provider for food (keep `create_order_draft` / `confirm_order` contracts stable)
 - 💳 Real payment / wallet provider (current JhaPay wallet is a mock with $5,000 demo balance)
 - ✈️ **Duffel production token** (one env var swap: `duffel_test_*` → `duffel_live_*`) + their booking agreement
+- 🏨 **Hotel booking provider** — Google Places doesn't book; pair Places (discovery + photos) with a real OTA API like [Liteapi](https://liteapi.travel), [Booking.com Affiliate](https://partners.booking.com), [Hotelbeds](https://www.hotelbeds.com), or [Expedia EAN](https://developers.expediagroup.com)
 - 📋 Real menu source (your CMS or POS feed)
-- 🗄️ Shared session store (Redis) — for both food orders AND pending flight bookings
+- 🗄️ Shared session store (Redis) — for food orders, pending flight bookings, AND pending hotel bookings
 - 🚦 API auth + rate limiting on `/api/booking/passengers` and `/api/chat`
-- 📊 Observability (OpenTelemetry traces, error tracking on Duffel failures)
+- 📊 Observability (OpenTelemetry traces, error tracking on Duffel + Places failures)
 - 📜 Audit dashboards (the tool audit log is already wired)
 - 🚀 CI/CD pipeline
 
